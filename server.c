@@ -21,6 +21,7 @@ void func(int connfd)
 
 		// read the message from client and copy it in buffer
 		read(connfd, buff, sizeof(buff));
+        printf("Client send this message: %s", buff);
 		// print buffer which contains the client contents
 		printf("From client: %s\t To client : ", buff);
 		bzero(buff, MAX);
