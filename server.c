@@ -10,6 +10,7 @@
 #define PORT 8080
 #define SA struct sockaddr
 
+
 // Function designed for chat between client and server.
 void func(int connfd)
 {
@@ -46,7 +47,7 @@ int main()
 {
 	int sockfd, connfd, len;
 	struct sockaddr_in servaddr, cli;
-
+    
 	// socket create and verification
 	sockfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (sockfd == -1) {

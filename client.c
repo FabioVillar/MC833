@@ -15,7 +15,18 @@ void func(int sockfd)
 	int n;
 	for (;;) {
 		bzero(buff, sizeof(buff));
-		printf("Enter the string : ");
+        char menu[500] =    
+        "\nMENU\n"
+        "Write a number accordingly to what you want:\n"
+        "1 - Insert a new profile in the system\n"
+        "2 - List all people graduated in a specific course\n"
+        "3 - List all people graduated in a specific year\n"
+        "4 - Liss all informations of all profiles\n"
+        "5 - Given an email, list all information of it\n"
+        "6 - Given an email, remove a profile\n"
+        ;
+        printf("Testing...");
+		printf("%s", menu);
 		n = 0;
 		while ((buff[n++] = getchar()) != '\n')
 			;
