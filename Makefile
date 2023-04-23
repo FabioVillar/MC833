@@ -1,9 +1,9 @@
-CCFLAGS=-Wall
+CCFLAGS=-Wall -g
 
 all: client server
 
-client: client.c
+client: src/client.c
 	$(CC) -o $@ $< $(CCFLAGS)
 
-server: server.c
+server: src/server.c
 	$(CC) -o $@ $< $(CCFLAGS)
