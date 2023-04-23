@@ -8,7 +8,7 @@
 #include <unistd.h>  // read(), write(), close()
 
 #define BUFFER_SIZE 80
-#define PORT 8080
+#define DEFAULT_PORT 8080
 #define SA struct sockaddr
 
 /// Sends a string to the server.
@@ -87,12 +87,25 @@ static int runClient(int sockfd) {
     }
 }
 
-int main() {
+int main(int argc, char **argv) {
+    int port;
+    switch (argc) {
+    case 1:
+        port = DEFAULT_PORT;
+        break;
+    case 2:
+        port = atoi(argv[1]);
+        break;
+    default:
+        printf("Usage: %s [port]\n", argv[0]);
+        return 1;
+    }
+
     // assign IP, PORT
     struct sockaddr_in servaddr = {};
     servaddr.sin_family = AF_INET;
     servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-    servaddr.sin_port = htons(PORT);
+    servaddr.sin_port = htons(port);
 
     for (;;) {
         // socket create and verification

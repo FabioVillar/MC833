@@ -11,10 +11,10 @@ SERVER_DEP=$(SERVER_OBJ:%.o=%.d)
 all: client server
 
 client: $(CLIENT_OBJ)
-	$(CC) -o $@ $< $(CCFLAGS)
+	$(CC) -o $@ $^ $(CCFLAGS)
 
 server: $(SERVER_OBJ)
-	$(CC) -o $@ $< $(CCFLAGS)
+	$(CC) -o $@ $^ $(CCFLAGS)
 
 clean:
 	rm -rf build
