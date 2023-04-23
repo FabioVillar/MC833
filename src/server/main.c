@@ -124,6 +124,11 @@ static int runServer(int connfd) {
     }
 }
 
+// Thread accepts incoming connections.
+static void *serverThread(void *params_) {
+    
+}
+
 // Driver function
 int main() {
     int r;
