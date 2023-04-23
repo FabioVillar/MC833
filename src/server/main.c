@@ -89,17 +89,22 @@ static int insertProfile(int fd) {
     r = receiveString(fd, year, sizeof(year));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert your skills");
+    sendString(fd, "Insert your skills (Skill1/Skill2/Skill3/etc)");
     char skills[100];
     r = receiveString(fd, skills, sizeof(skills));
     if (r <= 0) return r;
 
     FILE *fp;
     fp = fopen("profile.txt", "w");
-    fprintf(fp, "Profile:");
-    fprintf(fp, "%s", email);
+    fprintf(fp, "Profile:\n");
+    fprintf(fp, "%s\n", email);
+    fprintf(fp, "%s\n", name);
+    fprintf(fp, "%s\n", lastName);
+    fprintf(fp, "%s\n", city);
+    fprintf(fp, "%s\n", graduationField);
+    fprintf(fp, "%s\n", year);
+    fprintf(fp, "%s\n", skills);
     fclose(fp);
-
     return 1;
 }
 
