@@ -40,8 +40,8 @@ void func(int sockfd) {
 }
 
 int main() {
-    int sockfd, connfd;
-    struct sockaddr_in servaddr, cli;
+    int sockfd;
+    struct sockaddr_in servaddr;
 
     // socket create and verification
     sockfd = socket(AF_INET, SOCK_STREAM, 0);

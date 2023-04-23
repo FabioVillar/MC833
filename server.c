@@ -92,7 +92,6 @@ void manageBuff(char *buff, int connfd) {
 // Function designed for chat between client and server.
 void func(int connfd) {
     char buff[MAX];
-    int n;
     // infinite loop for chat
     for (;;) {
         strcpy(readFromClient(buff, connfd), buff);
@@ -102,7 +101,7 @@ void func(int connfd) {
 
 // Driver function
 int main() {
-    int sockfd, connfd, len;
+    int sockfd, connfd;
     struct sockaddr_in servaddr, cli;
 
     // socket create and verification
@@ -135,9 +134,9 @@ int main() {
     } else {
         printf("Server listening..\n");
     }
-    len = sizeof(cli);
 
     // Accept the data packet from client and verification
+    socklen_t len = sizeof(cli);
     connfd = accept(sockfd, (SA *)&cli, &len);
     if (connfd < 0) {
         printf("server accept failed...\n");
