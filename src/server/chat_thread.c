@@ -117,6 +117,32 @@ static int listEverything(int fd){
     return 1;
 }  
 
+static int listByEmail(int fd){
+    int r;
+    sendString(fd, "Insert the email to list by:");
+    char email[50];
+    r = receiveString(fd, email, sizeof(email));
+    if (r <= 0) return r;
+    printf("Listing all profiles with %s as email:\n", email);
+    FILE *fp;
+    fp = fopen("profile.txt", "r");
+    char file[1000];
+    while(fgets(file, 1000, fp)){
+        char* token;
+        char file2[1000];
+        strcpy(file2, file);
+        token = strtok(file2, " ");
+        while(token != NULL){
+            if(strcmp(token, email) == 0){
+                sendString(fd, file);
+                break;
+            }
+            token = strtok(NULL, " ");
+        }
+    }
+    return 1;
+} 
+
 static int insertProfile(int fd) {
     int r;
     
@@ -175,7 +201,10 @@ static int handleMessage(int fd, const char *message) {
     } 
     else if ((strcmp(message, "4")) == 0){
         return listEverything(fd);
-    }    
+    }  
+    else if ((strcmp(message, "5")) == 0){
+        return listByEmail(fd);
+    }   
     else{
         return sendString(fd, "Unknown message");
     }   
