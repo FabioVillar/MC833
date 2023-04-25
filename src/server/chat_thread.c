@@ -80,6 +80,32 @@ static int listByCourse(int fd){
     return 1;
 }   
 
+static int listByYear(int fd){
+    int r;
+    sendString(fd, "Insert the year to list by:");
+    char year[50];
+    r = receiveString(fd, year, sizeof(year));
+    if (r <= 0) return r;
+    printf("Listing all profiles with %s as graduation year:\n", year);
+    FILE *fp;
+    fp = fopen("profile.txt", "r");
+    char file[1000];
+    while(fgets(file, 1000, fp)){
+        char* token;
+        char file2[1000];
+        strcpy(file2, file);
+        token = strtok(file2, " ");
+        while(token != NULL){
+            if(strcmp(token, year) == 0){
+                sendString(fd, file);
+                break;
+            }
+            token = strtok(NULL, " ");
+        }
+    }
+    return 1;
+}  
+
 static int insertProfile(int fd) {
     int r;
     
@@ -132,7 +158,10 @@ static int handleMessage(int fd, const char *message) {
     } 
     else if ((strcmp(message, "2")) == 0){
         return listByCourse(fd);
-    }   
+    } 
+    else if ((strcmp(message, "3")) == 0){
+        return listByYear(fd);
+    }    
     else{
         return sendString(fd, "Unknown message");
     }   
