@@ -8,7 +8,7 @@
 #include <unistd.h>  // read(), write(), close()
 
 #define BUFFER_SIZE 80
-#define DEFAULT_PORT 8080
+#define DEFAULT_PORT 8082
 #define SA struct sockaddr
 
 /// Sends a string to the server.
@@ -74,16 +74,34 @@ static int runClient(int sockfd) {
     int r;
 
     for (;;) {
-        if ((r = receiveString(sockfd, buf, BUFFER_SIZE)) <= 0) return r;
-        if ((strcmp(buf, "exit")) == 0) {
-            printf("Client Exit...\n");
-            return 0;
-        } else if ((strcmp(buf, "menu")) == 0) {
-            showMenu();
+        if ((r = receiveString(sockfd, buf, BUFFER_SIZE)) <= 0){
+            bzero(buf, BUFFER_SIZE);
+            return r;
+        } 
+        char checkBuf[BUFFER_SIZE];
+        checkBuf[0] = '\0';
+        int i;
+        for(i = 0; buf[i] != ' ' && buf[i] != '\0' && i < BUFFER_SIZE - 1; i ++){
+            checkBuf[i] =  buf[i];
         }
-        
-        scanf("%79s", buf);
-        if ((r = sendString(sockfd, buf)) <= 0) return r;
+        int condition = -1;
+        checkBuf[i] = '\0';
+        if ((strcmp(checkBuf, "exit")) == 0) {
+            printf("Client Exit...\n");
+            bzero(buf, BUFFER_SIZE);
+            return 0;
+        } else if ((strcmp(checkBuf, "menu")) == 0) {
+            showMenu();
+            condition = 1;
+        }
+        else if ((strcmp(checkBuf, "Insert")) == 0) {
+            condition = 1;
+        }
+        if(condition == 1){
+            scanf("%79s", buf);
+            if ((r = sendString(sockfd, buf)) <= 0) return r;
+        }
+        bzero(buf, BUFFER_SIZE);
     }
 }
 

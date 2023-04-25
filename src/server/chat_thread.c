@@ -63,27 +63,19 @@ static int listByCourse(int fd){
     printf("Listing all profiles with %s as graduation course:\n", course);
     FILE *fp;
     fp = fopen("profile.txt", "r");
-    char file[100];
-    char profile[6][100];
-    int count = 0;
-    int condition = -1;
-    while(fgets(file, 100, fp)) {
-        strcpy(profile[count], file);
-        if (count == 5){
-            if (strncmp(profile[count], course, strlen(course)) != 0){
-                condition = 1;
+    char file[1000];
+    while(fgets(file, 1000, fp)){
+        char* token;
+        char file2[1000];
+        strcpy(file2, file);
+        token = strtok(file2, " ");
+        while(token != NULL){
+            if(strcmp(token, course) == 0){
+                sendString(fd, file);
+                break;
             }
+            token = strtok(NULL, " ");
         }
-        else if (count == 7){
-            if (condition == -1){
-                for(int i = 0; i <= count; i++){
-                    sendString(fd, profile[i]);
-                }
-            }
-            condition = -1;
-            count = -1;
-        }
-        count ++;
     }
     return 1;
 }   
@@ -121,21 +113,14 @@ static int insertProfile(int fd) {
     r = receiveString(fd, year, sizeof(year));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert your skills (Skill1/Skill2/Skill3/etc)");
+    sendString(fd, "Insert your skills (Ex.: Skill1/Skill2/Skill3/etc)");
     char skills[100];
     r = receiveString(fd, skills, sizeof(skills));
     if (r <= 0) return r;
 
     FILE *fp;
     fp = fopen("profile.txt", "a");
-    fprintf(fp, "Profile:\n");
-    fprintf(fp, "%s\n", email);
-    fprintf(fp, "%s\n", name);
-    fprintf(fp, "%s\n", lastName);
-    fprintf(fp, "%s\n", city);
-    fprintf(fp, "%s\n", graduationField);
-    fprintf(fp, "%s\n", year);
-    fprintf(fp, "%s\n", skills);
+    fprintf(fp, "%s %s %s %s %s %s %s %s\n", "Profile:", email, name, lastName, city, graduationField, year, skills);
     fclose(fp);
 
     return 1;
