@@ -54,6 +54,40 @@ static int receiveString(int fd, char *buf, int bufSize) {
     }
 }
 
+static int listByCourse(int fd){
+    int r;
+    sendString(fd, "Insert the course to list by:");
+    char course[50];
+    r = receiveString(fd, course, sizeof(course));
+    if (r <= 0) return r;
+    printf("Listing all profiles with %s as graduation course:\n", course);
+    FILE *fp;
+    fp = fopen("profile.txt", "r");
+    char file[100];
+    char profile[6][100];
+    int count = 0;
+    int condition = -1;
+    while(fgets(file, 100, fp)) {
+        strcpy(profile[count], file);
+        if (count == 5){
+            if (strncmp(profile[count], course, strlen(course)) != 0){
+                condition = 1;
+            }
+        }
+        else if (count == 7){
+            if (condition == -1){
+                for(int i = 0; i <= count; i++){
+                    sendString(fd, profile[i]);
+                }
+            }
+            condition = -1;
+            count = -1;
+        }
+        count ++;
+    }
+    return 1;
+}   
+
 static int insertProfile(int fd) {
     int r;
     
@@ -93,8 +127,8 @@ static int insertProfile(int fd) {
     if (r <= 0) return r;
 
     FILE *fp;
-    fp = fopen("profile.txt", "w");
-    fprintf(fp, "Profile:");
+    fp = fopen("profile.txt", "a");
+    fprintf(fp, "Profile:\n");
     fprintf(fp, "%s\n", email);
     fprintf(fp, "%s\n", name);
     fprintf(fp, "%s\n", lastName);
@@ -110,9 +144,13 @@ static int insertProfile(int fd) {
 static int handleMessage(int fd, const char *message) {
     if ((strcmp(message, "1")) == 0) {
         return insertProfile(fd);
-    } else {
+    } 
+    else if ((strcmp(message, "2")) == 0){
+        return listByCourse(fd);
+    }   
+    else{
         return sendString(fd, "Unknown message");
-    }
+    }   
 }
 
 static void runChat(Params *params) {
