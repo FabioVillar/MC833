@@ -8,7 +8,7 @@
 #include <unistd.h>  // read(), write(), close()
 
 #define BUFFER_SIZE 80
-#define DEFAULT_PORT 8080
+#define DEFAULT_PORT 8082
 #define SA struct sockaddr
 
 /// Sends a string to the server.
