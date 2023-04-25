@@ -106,6 +106,17 @@ static int listByYear(int fd){
     return 1;
 }  
 
+static int listEverything(int fd){
+    printf("Listing all information stored:");
+    FILE *fp;
+    fp = fopen("profile.txt", "r");
+    char file[1000];
+    while(fgets(file, 1000, fp)){
+        sendString(fd, file);
+    }
+    return 1;
+}  
+
 static int insertProfile(int fd) {
     int r;
     
@@ -161,6 +172,9 @@ static int handleMessage(int fd, const char *message) {
     } 
     else if ((strcmp(message, "3")) == 0){
         return listByYear(fd);
+    } 
+    else if ((strcmp(message, "4")) == 0){
+        return listEverything(fd);
     }    
     else{
         return sendString(fd, "Unknown message");
