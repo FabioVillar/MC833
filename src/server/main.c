@@ -5,7 +5,8 @@
 
 #include "accept_thread.h"
 
-#define DEFAULT_PORT 8082
+#define DEFAULT_PORT 8080
+
 static int shouldStop = 0;
 
 static void signalHandler(int signal) { shouldStop = 1; }
