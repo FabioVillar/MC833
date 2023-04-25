@@ -5,7 +5,7 @@
 
 #include "accept_thread.h"
 
-#define DEFAULT_PORT 8080
+#define DEFAULT_PORT 8082
 
 static int shouldStop = 0;
 
