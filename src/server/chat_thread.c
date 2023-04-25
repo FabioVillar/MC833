@@ -143,6 +143,47 @@ static int listByEmail(int fd){
     return 1;
 } 
 
+static int deleteEmail(FILE *fp, FILE *temp, char* email){
+    char file[1000];
+    while(fgets(file, 1000, fp)){
+        char* token;
+        char file2[1000];
+        strcpy(file2, file);
+        token = strtok(file2, " ");
+        while(token != NULL){
+            if(strcmp(token, email) == 0){
+                fputs(file, temp);
+                break;
+            }
+            token = strtok(NULL, " ");
+        }
+    }
+    return 1;
+}
+
+static int removeByEmail(int fd){
+    int r;
+    sendString(fd, "Insert the email to remove by:");
+    char email[50];
+    r = receiveString(fd, email, sizeof(email));
+    if (r <= 0) return r;
+    printf("Removing all profiles with %s as email:\n", email);
+    FILE *fp, *temp;
+    fp = fopen("profile.txt", "r");
+    temp = fopen("delete.tmp", "w");
+    if (fp == NULL || temp == NULL){
+        printf("Problem while opening file.\n");
+    }
+    else{
+        deleteEmail(fp, temp, email);
+        fclose(fp);
+        fclose(temp);
+        remove("profile.txt");
+        rename("delete.tmp", "profile.txt");
+    }
+    return 1;
+} 
+
 static int insertProfile(int fd) {
     int r;
     
@@ -205,6 +246,9 @@ static int handleMessage(int fd, const char *message) {
     else if ((strcmp(message, "5")) == 0){
         return listByEmail(fd);
     }   
+    else if ((strcmp(message, "6")) == 0){
+        return removeByEmail(fd);
+    }  
     else{
         return sendString(fd, "Unknown message");
     }   
