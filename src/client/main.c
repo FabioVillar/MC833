@@ -56,15 +56,15 @@ static int receiveString(int fd, char *buf, int bufSize) {
 
 /// Shows the menu
 static void showMenu() {
-    char menu[500] =
-            "\nMENU\n"
-            "Write a number accordingly to what you want:\n"
-            "1 - Insert a new profile in the system\n"
-            "2 - List all people graduated in a specific course\n"
-            "3 - List all people graduated in a specific year\n"
-            "4 - Liss all informations of all profiles\n"
-            "5 - Given an email, list all information of it\n"
-            "6 - Given an email, remove a profile\n";
+    char menu[] =
+        "\nMENU\n"
+        "Write a number accordingly to what you want:\n"
+        "1 - Insert a new profile in the system\n"
+        "2 - List all people graduated in a specific course\n"
+        "3 - List all people graduated in a specific year\n"
+        "4 - Liss all informations of all profiles\n"
+        "5 - Given an email, list all information of it\n"
+        "6 - Given an email, remove a profile\n";
     printf("%s", menu);
 }
 
@@ -74,15 +74,16 @@ static int runClient(int sockfd) {
     int r;
 
     for (;;) {
-        if ((r = receiveString(sockfd, buf, BUFFER_SIZE)) <= 0){
+        if ((r = receiveString(sockfd, buf, BUFFER_SIZE)) <= 0) {
             bzero(buf, BUFFER_SIZE);
             return r;
-        } 
+        }
         char checkBuf[BUFFER_SIZE];
         checkBuf[0] = '\0';
         int i;
-        for(i = 0; buf[i] != ' ' && buf[i] != '\0' && i < BUFFER_SIZE - 1; i ++){
-            checkBuf[i] =  buf[i];
+        for (i = 0; buf[i] != ' ' && buf[i] != '\0' && i < BUFFER_SIZE - 1;
+             i++) {
+            checkBuf[i] = buf[i];
         }
         int condition = -1;
         checkBuf[i] = '\0';
@@ -93,11 +94,10 @@ static int runClient(int sockfd) {
         } else if ((strcmp(checkBuf, "menu")) == 0) {
             showMenu();
             condition = 1;
-        }
-        else if ((strcmp(checkBuf, "Insert")) == 0) {
+        } else if ((strcmp(checkBuf, "Insert")) == 0) {
             condition = 1;
         }
-        if(condition == 1){
+        if (condition == 1) {
             scanf("%79s", buf);
             if ((r = sendString(sockfd, buf)) <= 0) return r;
         }
