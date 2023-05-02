@@ -27,9 +27,9 @@ static void runAccept(AcceptThread *thread) {
     int fd = thread->fd;
 
     // Binding newly created socket to given IP and verification
-    while (bind(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
+    if (bind(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
         printf("socket bind failed... (%s)\n", strerror(errno));
-        sleep(1);
+        return;
     }
 
     // Now server is ready to listen and verification
