@@ -21,6 +21,13 @@
 #define DEBUG_PRINT(...)
 #endif
 
+typedef struct {
+    int fd;
+    // Buffer circular
+    char receiveBuffer[BUFFER_SIZE];
+    int receiveBufferFilled;
+} Client;
+
 /// Sends a string to the server.
 ///
 /// Returns less than zero in case of error.
@@ -43,24 +50,34 @@ static int sendString(int fd, const char *buf) {
 /// Receives a string from the server.
 ///
 /// Returns less than zero in case of error.
-static int receiveString(int fd, char *buf, int bufSize) {
-    int received = 0;
+static int receiveString(Client *client, char *buf, int bufSize) {
     for (;;) {
-        if (received >= bufSize - 1) {
-            // string too large
-            return -1;
+        if (client->receiveBufferFilled != 0) {
+            // check if we received a null terminator
+            char *terminator = memchr(client->receiveBuffer, '\0', BUFFER_SIZE);
+            if (terminator != NULL) {
+                int terminatorIndex = terminator - client->receiveBuffer;
+                strncpy(buf, client->receiveBuffer, bufSize);
+                memmove(client->receiveBuffer,
+                        client->receiveBuffer + terminatorIndex + 1,
+                        BUFFER_SIZE - terminatorIndex);
+                client->receiveBufferFilled -= terminatorIndex + 1;
+
+                DEBUG_PRINT("Received: %s\n", buf);
+
+                return terminatorIndex - 1;
+            }
         }
 
-        int r = read(fd, &buf[received], bufSize - received);
+        DEBUG_PRINT("Waiting for server\n");
+
+        int r = read(client->fd,
+                &client->receiveBuffer[client->receiveBufferFilled],
+                BUFFER_SIZE - client->receiveBufferFilled);
         if (r <= 0) return r;
-        // we read "r" bytes
-        received += r;
 
-        // check if we received a null terminator
-        if (buf[received - 1] == 0) {
-            DEBUG_PRINT("Received: %s\n", buf);
-            return received;
-        }
+        // we read "r" bytes
+        client->receiveBufferFilled += r;
     }
 }
 
@@ -85,13 +102,17 @@ static void stdinLine(char *buf, int size) {
 
 /// Executes the client. Returns non-zero if an error occurred.
 static int runClient(int sockfd) {
+    Client client;
     char buf[BUFFER_SIZE];
     char cmd[BUFFER_SIZE];
     char param[BUFFER_SIZE];
     int r;
 
+    client.fd = sockfd;
+    client.receiveBufferFilled = 0;
+
     for (;;) {
-        if ((r = receiveString(sockfd, buf, BUFFER_SIZE)) <= 0) {
+        if ((r = receiveString(&client, buf, BUFFER_SIZE)) <= 0) {
             return r;
         }
 
