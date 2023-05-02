@@ -277,6 +277,7 @@ static int handleMenuOption(int fd, Database *database, const char *message) {
     }
 }
 
+/// Lógica da thread
 static void runChat(Params *params) {
     char buf[BUFFER_SIZE];
     int r;
@@ -295,6 +296,7 @@ static void runChat(Params *params) {
     printf("[%d] connection closed\n", fd);
 }
 
+/// Callback do pthread
 static void *chatThread(void *x) {
     runChat((Params *)x);
     free(x);

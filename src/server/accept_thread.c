@@ -18,6 +18,7 @@ struct AcceptThread {
     Database *database;
 };
 
+/// Lógica da thread
 static void runAccept(AcceptThread *thread) {
     // assign IP, PORT
     struct sockaddr_in servaddr = {};
@@ -27,6 +28,7 @@ static void runAccept(AcceptThread *thread) {
 
     int fd = thread->fd;
 
+    // Previne um problema de address already in use
     int one = 1;
     setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 
@@ -68,6 +70,7 @@ static void runAccept(AcceptThread *thread) {
     close(fd);
 }
 
+/// Callback pthread
 static void *acceptThread(void *x) {
     runAccept((AcceptThread *)x);
     free(x);

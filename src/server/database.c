@@ -14,9 +14,12 @@ typedef struct {
 struct Database {
     int nRows;
     Row *rows[DATABASE_MAX_ROWS];
+    // Protege a base de dados contra acesso em multiplas threads
     pthread_mutex_t mutex;
 };
 
+/// Parse a tab separated string, advancing the string and returning the column
+/// Must call free later on return value
 static char *nextColumn(char **row) {
     char *start = *row;
     if (!start) return NULL;
@@ -32,6 +35,7 @@ static char *nextColumn(char **row) {
     }
 }
 
+/// Parse a row from a tab separated line
 static Row *row_fromString(Database *database, char *string) {
     Row *row = calloc(1, sizeof(Row));
     if (!row) return NULL;
