@@ -168,45 +168,33 @@ static int listByEmail(int fd) {
     return 1;
 }
 
-static int deleteEmail(FILE *fp, FILE *temp, char *email) {
-    char file[1000];
-    while (fgets(file, 1000, fp)) {
-        char *token;
-        char file2[1000];
-        strcpy(file2, file);
-        token = strtok(file2, " ");
-        while (token != NULL) {
-            if (strcmp(token, email) == 0) {
-                fputs(file, temp);
-                break;
-            }
-            token = strtok(NULL, " ");
-        }
-    }
-    return 1;
-}
-
-static int removeByEmail(int fd) {
+static int removeByEmail(int fd){
     int r;
-    sendCmd(fd, CMD_PRINT, "Insert the email to remove by:\n");
+    sendCmd(fd, CMD_PRINT, "Insert the email to remove by:");
     char email[50];
     r = askInput(fd, email, sizeof(email));
     if (r <= 0) return r;
     printf("Removing all profiles with %s as email:\n", email);
-    FILE *fp, *temp;
-    fp = fopen("profile.txt", "r");
-    temp = fopen("delete.tmp", "w");
-    if (fp == NULL || temp == NULL) {
+    char* temp = "temp.txt";
+    FILE *fp = fopen("profile.txt", "r");
+    FILE *out = fopen("temp.txt", "w");
+    if (fp == NULL || out == NULL){
         printf("Problem while opening file.\n");
-    } else {
-        deleteEmail(fp, temp, email);
+    }
+    else{
+        char line[1000];
+        while(fgets(line, 1000, fp) != NULL){
+            if (strstr(line, email) == NULL){
+                fprintf(out, "%s", line);
+            }
+        }
         fclose(fp);
-        fclose(temp);
+        fclose(out);
         remove("profile.txt");
-        rename("delete.tmp", "profile.txt");
+        rename(temp, "profile.txt");
     }
     return 1;
-}
+} 
 
 static int insertProfile(int fd) {
     int r;
