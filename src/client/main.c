@@ -7,15 +7,25 @@
 #include <sys/socket.h>
 #include <unistd.h>  // read(), write(), close()
 
-#define BUFFER_SIZE 80
+// #define DEBUG
+#define BUFFER_SIZE 1024
 #define DEFAULT_PORT 8082
 #define SA struct sockaddr
+
+#define CMD_PRINT "print"
+#define CMD_INPUT "input"
+
+#ifdef DEBUG
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#endif
 
 /// Sends a string to the server.
 ///
 /// Returns less than zero in case of error.
 static int sendString(int fd, const char *buf) {
-    printf("Sending: %s\n", buf);
+    DEBUG_PRINT("Sending: %s\n", buf);
 
     // send strlen(buf) plus the null terminator
     int size = strlen(buf) + 1;
@@ -48,60 +58,46 @@ static int receiveString(int fd, char *buf, int bufSize) {
 
         // check if we received a null terminator
         if (buf[received - 1] == 0) {
-            printf("Received: %s\n", buf);
+            DEBUG_PRINT("Received: %s\n", buf);
             return received;
         }
     }
 }
 
-/// Shows the menu
-static void showMenu() {
-    char menu[] =
-        "\nMENU\n"
-        "Write a number accordingly to what you want:\n"
-        "1 - Insert a new profile in the system\n"
-        "2 - List all people graduated in a specific course\n"
-        "3 - List all people graduated in a specific year\n"
-        "4 - Liss all informations of all profiles\n"
-        "5 - Given an email, list all information of it\n"
-        "6 - Given an email, remove a profile\n";
-    printf("%s", menu);
-}
-
 /// Executes the client. Returns non-zero if an error occurred.
 static int runClient(int sockfd) {
     char buf[BUFFER_SIZE];
+    char cmd[BUFFER_SIZE];
+    char param[BUFFER_SIZE];
     int r;
 
     for (;;) {
         if ((r = receiveString(sockfd, buf, BUFFER_SIZE)) <= 0) {
-            bzero(buf, BUFFER_SIZE);
             return r;
         }
-        char checkBuf[BUFFER_SIZE];
-        checkBuf[0] = '\0';
-        int i;
-        for (i = 0; buf[i] != ' ' && buf[i] != '\0' && i < BUFFER_SIZE - 1;
-             i++) {
-            checkBuf[i] = buf[i];
+
+        // Separate first word in cmd and rest in
+        // param
+        char *firstSpace = strchr(buf, ' ');
+        if (firstSpace != NULL) {
+            int firstSpaceIndex = firstSpace - buf;
+            strncpy(cmd, buf, firstSpaceIndex);
+            strncpy(param, firstSpace + 1, BUFFER_SIZE);
+        } else {
+            strncpy(cmd, buf, BUFFER_SIZE);
+            param[0] = '\0';
         }
-        int condition = -1;
-        checkBuf[i] = '\0';
-        if ((strcmp(checkBuf, "exit")) == 0) {
-            printf("Client Exit...\n");
-            bzero(buf, BUFFER_SIZE);
-            return 0;
-        } else if ((strcmp(checkBuf, "menu")) == 0) {
-            showMenu();
-            condition = 1;
-        } else if ((strcmp(checkBuf, "Insert")) == 0) {
-            condition = 1;
-        }
-        if (condition == 1) {
+
+        // Decide next action based on cmd
+        if (strcmp(cmd, CMD_PRINT) == 0) {
+            printf("%s", param);
+        } else if (strcmp(cmd, CMD_INPUT) == 0) {
+            printf("> ");
             scanf("%79s", buf);
             if ((r = sendString(sockfd, buf)) <= 0) return r;
+        } else {
+            printf("Unknown command: %s", cmd);
         }
-        bzero(buf, BUFFER_SIZE);
     }
 }
 
@@ -129,17 +125,17 @@ int main(int argc, char **argv) {
         // socket create and verification
         int sockfd = socket(AF_INET, SOCK_STREAM, 0);
         if (sockfd == -1) {
-            printf("socket creation failed...\n");
+            printf("Socket creation failed.\n");
             exit(0);
         }
 
         // try to connect in a loop
         while (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0) {
-            printf("connection with the server failed...\n");
+            printf("Connection with the server failed.\n");
             sleep(1);
         }
 
-        printf("connected to the server..\n");
+        printf("Connected to the server.\n");
 
         // execute client code
         int r = runClient(sockfd);
@@ -149,11 +145,11 @@ int main(int argc, char **argv) {
 
         if (r == 0) {
             // successful exit
-            printf("connection closed\n");
+            printf("Connection closed\n");
             return 0;
         } else {
             // connection error
-            printf("connection error\n");
+            printf("Connection error\n");
         }
     }
 }

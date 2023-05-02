@@ -5,17 +5,37 @@
 #include <string.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 80
+#define BUFFER_SIZE 1024
+
+#define CMD_PRINT "print"
+#define CMD_INPUT "input"
+
+static const char MENU[] =
+    "\nMENU\n"
+    "Write a number accordingly to what you want:\n"
+    "1 - Insert a new profile in the system\n"
+    "2 - List all people graduated in a specific course\n"
+    "3 - List all people graduated in a specific year\n"
+    "4 - Liss all informations of all profiles\n"
+    "5 - Given an email, list all information of it\n"
+    "6 - Given an email, remove a profile\n\n";
 
 typedef struct {
     int fd;
 } Params;
 
-/// Sends a string to the client.
+/// Sends a command to the client.
 ///
 /// Returns less than zero in case of error.
-static int sendString(int fd, const char *buf) {
-    printf("[%d] sending: %s\n", fd, buf);
+static int sendCmd(int fd, const char *cmd, const char *params) {
+    char buf[BUFFER_SIZE];
+    if (params) {
+        snprintf(buf, BUFFER_SIZE, "%s %s", cmd, params);
+        printf("[%d] sending: %s ...\n", fd, cmd);
+    } else {
+        strncpy(buf, cmd, BUFFER_SIZE);
+        printf("[%d] sending: %s\n", fd, cmd);
+    }
 
     // send strlen(buf) plus the null terminator
     int size = strlen(buf) + 1;
@@ -30,10 +50,15 @@ static int sendString(int fd, const char *buf) {
     return size;
 }
 
-/// Receives a string from the client.
+/// Asks the client for input.
 ///
 /// Returns less than zero in case of error.
-static int receiveString(int fd, char *buf, int bufSize) {
+static int askInput(int fd, char *buf, int bufSize) {
+    int r;
+    if ((r = sendCmd(fd, CMD_INPUT, NULL)) < 0) {
+        return r;
+    }
+
     int received = 0;
     for (;;) {
         if (received >= bufSize - 1) {
@@ -41,7 +66,7 @@ static int receiveString(int fd, char *buf, int bufSize) {
             return -1;
         }
 
-        int r = read(fd, &buf[received], bufSize - received);
+        r = read(fd, &buf[received], bufSize - received);
         if (r <= 0) return r;
         // we read "r" bytes
         received += r;
@@ -56,9 +81,9 @@ static int receiveString(int fd, char *buf, int bufSize) {
 
 static int listByCourse(int fd) {
     int r;
-    sendString(fd, "Insert the course to list by:");
+    sendCmd(fd, CMD_PRINT, "Insert the course to list by:\n");
     char course[50];
-    r = receiveString(fd, course, sizeof(course));
+    r = askInput(fd, course, sizeof(course));
     if (r <= 0) return r;
     printf("Listing all profiles with %s as graduation course:\n", course);
     FILE *fp;
@@ -71,7 +96,7 @@ static int listByCourse(int fd) {
         token = strtok(file2, " ");
         while (token != NULL) {
             if (strcmp(token, course) == 0) {
-                sendString(fd, file);
+                sendCmd(fd, CMD_PRINT, file);
                 break;
             }
             token = strtok(NULL, " ");
@@ -82,9 +107,9 @@ static int listByCourse(int fd) {
 
 static int listByYear(int fd) {
     int r;
-    sendString(fd, "Insert the year to list by:");
+    sendCmd(fd, CMD_PRINT, "Insert the year to list by:\n");
     char year[50];
-    r = receiveString(fd, year, sizeof(year));
+    r = askInput(fd, year, sizeof(year));
     if (r <= 0) return r;
     printf("Listing all profiles with %s as graduation year:\n", year);
     FILE *fp;
@@ -97,7 +122,7 @@ static int listByYear(int fd) {
         token = strtok(file2, " ");
         while (token != NULL) {
             if (strcmp(token, year) == 0) {
-                sendString(fd, file);
+                sendCmd(fd, CMD_PRINT, file);
                 break;
             }
             token = strtok(NULL, " ");
@@ -112,16 +137,16 @@ static int listEverything(int fd) {
     fp = fopen("profile.txt", "r");
     char file[1000];
     while (fgets(file, 1000, fp)) {
-        sendString(fd, file);
+        sendCmd(fd, CMD_PRINT, file);
     }
     return 1;
 }
 
 static int listByEmail(int fd) {
     int r;
-    sendString(fd, "Insert the email to list by:");
+    sendCmd(fd, CMD_PRINT, "Insert the email to list by:\n");
     char email[50];
-    r = receiveString(fd, email, sizeof(email));
+    r = askInput(fd, email, sizeof(email));
     if (r <= 0) return r;
     printf("Listing all profiles with %s as email:\n", email);
     FILE *fp;
@@ -134,7 +159,7 @@ static int listByEmail(int fd) {
         token = strtok(file2, " ");
         while (token != NULL) {
             if (strcmp(token, email) == 0) {
-                sendString(fd, file);
+                sendCmd(fd, CMD_PRINT, file);
                 break;
             }
             token = strtok(NULL, " ");
@@ -163,9 +188,9 @@ static int deleteEmail(FILE *fp, FILE *temp, char *email) {
 
 static int removeByEmail(int fd) {
     int r;
-    sendString(fd, "Insert the email to remove by:");
+    sendCmd(fd, CMD_PRINT, "Insert the email to remove by:\n");
     char email[50];
-    r = receiveString(fd, email, sizeof(email));
+    r = askInput(fd, email, sizeof(email));
     if (r <= 0) return r;
     printf("Removing all profiles with %s as email:\n", email);
     FILE *fp, *temp;
@@ -186,39 +211,40 @@ static int removeByEmail(int fd) {
 static int insertProfile(int fd) {
     int r;
 
-    sendString(fd, "Insert email");
+    sendCmd(fd, CMD_PRINT, "Insert email\n");
     char email[50];
-    r = receiveString(fd, email, sizeof(email));
+    r = askInput(fd, email, sizeof(email));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert name");
+    sendCmd(fd, CMD_PRINT, "Insert name\n");
     char name[50];
-    r = receiveString(fd, name, sizeof(name));
+    r = askInput(fd, name, sizeof(name));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert last name");
+    sendCmd(fd, CMD_PRINT, "Insert last name\n");
     char lastName[50];
-    r = receiveString(fd, lastName, sizeof(lastName));
+    r = askInput(fd, lastName, sizeof(lastName));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert your city");
+    sendCmd(fd, CMD_PRINT, "Insert your city\n");
     char city[50];
-    r = receiveString(fd, city, sizeof(city));
+    r = askInput(fd, city, sizeof(city));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert your graduation field");
+    sendCmd(fd, CMD_PRINT, "Insert your graduation field\n");
     char graduationField[50];
-    r = receiveString(fd, graduationField, sizeof(graduationField));
+    r = askInput(fd, graduationField, sizeof(graduationField));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert graduation year");
+    sendCmd(fd, CMD_PRINT, "Insert graduation year\n");
     char year[5];
-    r = receiveString(fd, year, sizeof(year));
+    r = askInput(fd, year, sizeof(year));
     if (r <= 0) return r;
 
-    sendString(fd, "Insert your skills (Ex.: Skill1/Skill2/Skill3/etc)");
+    sendCmd(fd, CMD_PRINT,
+            "Insert your skills (Ex.: Skill1/Skill2/Skill3/etc)\n");
     char skills[100];
-    r = receiveString(fd, skills, sizeof(skills));
+    r = askInput(fd, skills, sizeof(skills));
     if (r <= 0) return r;
 
     FILE *fp;
@@ -230,7 +256,7 @@ static int insertProfile(int fd) {
     return 1;
 }
 
-static int handleMessage(int fd, const char *message) {
+static int handleMenuOption(int fd, const char *message) {
     if ((strcmp(message, "1")) == 0) {
         return insertProfile(fd);
     } else if ((strcmp(message, "2")) == 0) {
@@ -244,7 +270,7 @@ static int handleMessage(int fd, const char *message) {
     } else if ((strcmp(message, "6")) == 0) {
         return removeByEmail(fd);
     } else {
-        return sendString(fd, "Unknown message");
+        return sendCmd(fd, CMD_PRINT, "Unknown message\n");
     }
 }
 
@@ -255,9 +281,9 @@ static void runChat(Params *params) {
     int fd = params->fd;
 
     for (;;) {
-        if ((r = sendString(fd, "menu")) <= 0) break;
-        if ((r = receiveString(fd, buf, BUFFER_SIZE)) <= 0) break;
-        if ((r = handleMessage(fd, buf)) <= 0) break;
+        if ((r = sendCmd(fd, CMD_PRINT, MENU)) <= 0) break;
+        if ((r = askInput(fd, buf, BUFFER_SIZE)) <= 0) break;
+        if ((r = handleMenuOption(fd, buf)) <= 0) break;
     }
 
     // close the connection
