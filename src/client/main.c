@@ -16,7 +16,7 @@
 #define CMD_INPUT "input"
 
 #ifdef DEBUG
-#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#define DEBUG_PRINT(...) printf("** DEBUG ** " __VA_ARGS__)
 #else
 #define DEBUG_PRINT(...)
 #endif
@@ -64,6 +64,25 @@ static int receiveString(int fd, char *buf, int bufSize) {
     }
 }
 
+/// Read user input until newline.
+static void stdinLine(char *buf, int size) {
+    int i = 0;
+
+    for (;;) {
+        char c = getchar();
+
+        if (c == '\n' || c == EOF) {
+            buf[i] = '\0';
+            return;
+        }
+
+        if (i < size - 1) {
+            buf[i] = c;
+            i++;
+        }
+    }
+}
+
 /// Executes the client. Returns non-zero if an error occurred.
 static int runClient(int sockfd) {
     char buf[BUFFER_SIZE];
@@ -93,7 +112,7 @@ static int runClient(int sockfd) {
             printf("%s", param);
         } else if (strcmp(cmd, CMD_INPUT) == 0) {
             printf("> ");
-            scanf("%79s", buf);
+            stdinLine(buf, BUFFER_SIZE);
             if ((r = sendString(sockfd, buf)) <= 0) return r;
         } else {
             printf("Unknown command: %s", cmd);
