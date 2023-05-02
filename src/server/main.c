@@ -26,7 +26,11 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    AcceptThread *acceptThread = startAcceptThread(port);
+    Database *database = database_new();
+    if (!database) return 1;
+    database_load(database, DATABASE_FILE);
+
+    AcceptThread *acceptThread = startAcceptThread(port, database);
     if (!acceptThread) return 1;
 
     signal(SIGINT, signalHandler);
@@ -35,6 +39,7 @@ int main(int argc, char **argv) {
     }
 
     stopAcceptThread(acceptThread);
+    database_free(database);
 
     return 0;
 }

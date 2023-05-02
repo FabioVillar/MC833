@@ -15,6 +15,7 @@ struct AcceptThread {
     pthread_t thread;
     int fd;
     int port;
+    Database *database;
 };
 
 static void runAccept(AcceptThread *thread) {
@@ -25,6 +26,9 @@ static void runAccept(AcceptThread *thread) {
     servaddr.sin_port = htons(thread->port);
 
     int fd = thread->fd;
+
+    int one = 1;
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof(one));
 
     // Binding newly created socket to given IP and verification
     if (bind(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
@@ -53,7 +57,7 @@ static void runAccept(AcceptThread *thread) {
         printf("[%d] new connection\n", connfd);
 
         pthread_t chatThread;
-        if (startChatThread(&chatThread, connfd) < 0) {
+        if (startChatThread(&chatThread, thread->database, connfd) < 0) {
             printf("startChatThread failed...\n");
             close(connfd);
             break;
@@ -70,9 +74,10 @@ static void *acceptThread(void *x) {
     return NULL;
 }
 
-AcceptThread *startAcceptThread(int port) {
+AcceptThread *startAcceptThread(int port, Database *database) {
     AcceptThread *thread = calloc(1, sizeof(AcceptThread));
     thread->port = port;
+    thread->database = database;
 
     // socket create and verification
     thread->fd = socket(AF_INET, SOCK_STREAM, 0);

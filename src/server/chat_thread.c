@@ -16,11 +16,12 @@ static const char MENU[] =
     "1 - Insert a new profile in the system\n"
     "2 - List all people graduated in a specific course\n"
     "3 - List all people graduated in a specific year\n"
-    "4 - Liss all informations of all profiles\n"
+    "4 - List all informations of all profiles\n"
     "5 - Given an email, list all information of it\n"
     "6 - Given an email, remove a profile\n\n";
 
 typedef struct {
+    Database *database;
     int fd;
 } Params;
 
@@ -73,130 +74,146 @@ static int askInput(int fd, char *buf, int bufSize) {
 
         // check if we received a null terminator
         if (buf[received - 1] == 0) {
-            printf("[%d] received: %s\n", fd, buf);
-            return received;
+            break;
         }
     }
+
+    // check if contains a tab
+    if (strchr(buf, '\t')) {
+        sendCmd(fd, CMD_PRINT, "Nao deve conter tab");
+        return -1;
+    }
+
+    printf("[%d] received: %s\n", fd, buf);
+
+    return received;
 }
 
-static int listByCourse(int fd) {
+/// Print a row as a profile
+static void printProfile(int fd, Database *database, int row) {
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+    char *city = database_get(database, row, COLUMN_CITY);
+    char *graduation = database_get(database, row, COLUMN_GRADUATION);
+    char *gradYear = database_get(database, row, COLUMN_GRAD_YEAR);
+    char *skills = database_get(database, row, COLUMN_SKILLS);
+
+    char buf[BUFFER_SIZE];
+    snprintf(buf, BUFFER_SIZE,
+             "-------------------------\n"
+             "Email: %s\n"
+             "First Name: %s\n"
+             "Last Name: %s\n"
+             "City: %s\n"
+             "Graduation Field: %s\n"
+             "Graduation Year: %s\n"
+             "Skills: %s\n",
+             email, firstName, lastName, city, graduation, gradYear, skills);
+    sendCmd(fd, CMD_PRINT, buf);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+    free(city);
+    free(graduation);
+    free(gradYear);
+    free(skills);
+}
+
+static int listByCourse(int fd, Database *database) {
     int r;
     sendCmd(fd, CMD_PRINT, "Insert the course to list by:\n");
     char course[50];
     r = askInput(fd, course, sizeof(course));
     if (r <= 0) return r;
-    printf("Listing all profiles with %s as graduation course:\n", course);
-    FILE *fp;
-    fp = fopen("profile.txt", "r");
-    char file[1000];
-    while (fgets(file, 1000, fp)) {
-        char *token;
-        char file2[1000];
-        strcpy(file2, file);
-        token = strtok(file2, " ");
-        while (token != NULL) {
-            if (strcmp(token, course) == 0) {
-                sendCmd(fd, CMD_PRINT, file);
-                break;
-            }
-            token = strtok(NULL, " ");
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        char *graduation = database_get(database, i, COLUMN_GRADUATION);
+        if (strcmp(graduation, course) == 0) {
+            printProfile(fd, database, i);
         }
+        free(graduation);
     }
+    sendCmd(fd, CMD_PRINT, "------ END OF LIST ------\n");
+
     return 1;
 }
 
-static int listByYear(int fd) {
+static int listByYear(int fd, Database *database) {
     int r;
     sendCmd(fd, CMD_PRINT, "Insert the year to list by:\n");
     char year[50];
     r = askInput(fd, year, sizeof(year));
     if (r <= 0) return r;
-    printf("Listing all profiles with %s as graduation year:\n", year);
-    FILE *fp;
-    fp = fopen("profile.txt", "r");
-    char file[1000];
-    while (fgets(file, 1000, fp)) {
-        char *token;
-        char file2[1000];
-        strcpy(file2, file);
-        token = strtok(file2, " ");
-        while (token != NULL) {
-            if (strcmp(token, year) == 0) {
-                sendCmd(fd, CMD_PRINT, file);
-                break;
-            }
-            token = strtok(NULL, " ");
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        char *gradYear = database_get(database, i, COLUMN_GRAD_YEAR);
+        if (strcmp(gradYear, year) == 0) {
+            printProfile(fd, database, i);
         }
+        free(gradYear);
     }
+    sendCmd(fd, CMD_PRINT, "------ END OF LIST ------\n");
+
     return 1;
 }
 
-static int listEverything(int fd) {
-    printf("Listing all information stored:");
-    FILE *fp;
-    fp = fopen("profile.txt", "r");
-    char file[1000];
-    while (fgets(file, 1000, fp)) {
-        sendCmd(fd, CMD_PRINT, file);
+static int listEverything(int fd, Database *database) {
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        printProfile(fd, database, i);
     }
+    sendCmd(fd, CMD_PRINT, "------ END OF LIST ------\n");
+
     return 1;
 }
 
-static int listByEmail(int fd) {
+static int listByEmail(int fd, Database *database) {
     int r;
     sendCmd(fd, CMD_PRINT, "Insert the email to list by:\n");
     char email[50];
     r = askInput(fd, email, sizeof(email));
     if (r <= 0) return r;
-    printf("Listing all profiles with %s as email:\n", email);
-    FILE *fp;
-    fp = fopen("profile.txt", "r");
-    char file[1000];
-    while (fgets(file, 1000, fp)) {
-        char *token;
-        char file2[1000];
-        strcpy(file2, file);
-        token = strtok(file2, " ");
-        while (token != NULL) {
-            if (strcmp(token, email) == 0) {
-                sendCmd(fd, CMD_PRINT, file);
-                break;
-            }
-            token = strtok(NULL, " ");
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        char *email2 = database_get(database, i, COLUMN_EMAIL);
+        if (strcmp(email2, email) == 0) {
+            printProfile(fd, database, i);
         }
+        free(email2);
     }
+    sendCmd(fd, CMD_PRINT, "------ END OF LIST ------\n");
+
     return 1;
 }
 
-static int removeByEmail(int fd){
+static int removeByEmail(int fd, Database *database) {
     int r;
-    sendCmd(fd, CMD_PRINT, "Insert the email to remove by:");
+    sendCmd(fd, CMD_PRINT, "Insert the email to remove by:\n");
     char email[50];
     r = askInput(fd, email, sizeof(email));
     if (r <= 0) return r;
-    printf("Removing all profiles with %s as email:\n", email);
-    char* temp = "temp.txt";
-    FILE *fp = fopen("profile.txt", "r");
-    FILE *out = fopen("temp.txt", "w");
-    if (fp == NULL || out == NULL){
-        printf("Problem while opening file.\n");
-    }
-    else{
-        char line[1000];
-        while(fgets(line, 1000, fp) != NULL){
-            if (strstr(line, email) == NULL){
-                fprintf(out, "%s", line);
-            }
-        }
-        fclose(fp);
-        fclose(out);
-        remove("profile.txt");
-        rename(temp, "profile.txt");
-    }
-    return 1;
-} 
 
-static int insertProfile(int fd) {
+    int i = 0;
+    while (i < database_countRows(database)) {
+        const char *email2 = database_get(database, i, COLUMN_EMAIL);
+        if (strcmp(email2, email) == 0) {
+            database_deleteRow(database, i);
+        } else {
+            i++;
+        }
+    }
+
+    database_save(database, DATABASE_FILE);
+
+    return 1;
+}
+
+static int insertProfile(int fd, Database *database) {
     int r;
 
     sendCmd(fd, CMD_PRINT, "Insert email\n");
@@ -235,28 +252,26 @@ static int insertProfile(int fd) {
     r = askInput(fd, skills, sizeof(skills));
     if (r <= 0) return r;
 
-    FILE *fp;
-    fp = fopen("profile.txt", "a");
-    fprintf(fp, "%s %s %s %s %s %s %s %s\n", "Profile:", email, name, lastName,
-            city, graduationField, year, skills);
-    fclose(fp);
+    database_addRow(database, email, name, lastName, city, graduationField,
+                    year, skills);
+    database_save(database, DATABASE_FILE);
 
     return 1;
 }
 
-static int handleMenuOption(int fd, const char *message) {
+static int handleMenuOption(int fd, Database *database, const char *message) {
     if ((strcmp(message, "1")) == 0) {
-        return insertProfile(fd);
+        return insertProfile(fd, database);
     } else if ((strcmp(message, "2")) == 0) {
-        return listByCourse(fd);
+        return listByCourse(fd, database);
     } else if ((strcmp(message, "3")) == 0) {
-        return listByYear(fd);
+        return listByYear(fd, database);
     } else if ((strcmp(message, "4")) == 0) {
-        return listEverything(fd);
+        return listEverything(fd, database);
     } else if ((strcmp(message, "5")) == 0) {
-        return listByEmail(fd);
+        return listByEmail(fd, database);
     } else if ((strcmp(message, "6")) == 0) {
-        return removeByEmail(fd);
+        return removeByEmail(fd, database);
     } else {
         return sendCmd(fd, CMD_PRINT, "Unknown message\n");
     }
@@ -271,7 +286,7 @@ static void runChat(Params *params) {
     for (;;) {
         if ((r = sendCmd(fd, CMD_PRINT, MENU)) <= 0) break;
         if ((r = askInput(fd, buf, BUFFER_SIZE)) <= 0) break;
-        if ((r = handleMenuOption(fd, buf)) <= 0) break;
+        if ((r = handleMenuOption(fd, params->database, buf)) <= 0) break;
     }
 
     // close the connection
@@ -286,12 +301,13 @@ static void *chatThread(void *x) {
     return NULL;
 }
 
-int startChatThread(pthread_t *thread, int fd) {
+int startChatThread(pthread_t *thread, Database *database, int fd) {
     int r;
     pthread_attr_t attr;
 
     Params *params = malloc(sizeof(Params));
     params->fd = fd;
+    params->database = database;
 
     if ((r = pthread_attr_init(&attr)) < 0) return r;
 
