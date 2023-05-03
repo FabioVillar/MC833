@@ -133,7 +133,7 @@ void database_load(Database *database, const char *path) {
         free(line);
         fclose(file);
     } else {
-        printf("Load failed\n");
+        // printf("Load failed\n");
     }
 
     pthread_mutex_unlock(&database->mutex);
