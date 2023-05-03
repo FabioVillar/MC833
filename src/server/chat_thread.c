@@ -15,10 +15,11 @@ static const char MENU[] =
     "Write a number accordingly to what you want:\n"
     "1 - Insert a new profile in the system\n"
     "2 - List all people graduated in a specific course\n"
-    "3 - List all people graduated in a specific year\n"
-    "4 - List all informations of all profiles\n"
-    "5 - Given an email, list all information of it\n"
-    "6 - Given an email, remove a profile\n\n";
+    "3 - List all people with a given skill\n"
+    "4 - List all people graduated in a specific year\n"
+    "5 - List all informations of all profiles\n"
+    "6 - Given an email, list all information of it\n"
+    "7 - Given an email, remove a profile\n";
 
 typedef struct {
     Database *database;
@@ -135,6 +136,26 @@ static int listByCourse(int fd, Database *database) {
             printProfile(fd, database, i);
         }
         free(graduation);
+    }
+    sendCmd(fd, CMD_PRINT, "------ END OF LIST ------\n");
+
+    return 1;
+}
+
+static int listBySkill(int fd, Database *database) {
+    int r;
+    sendCmd(fd, CMD_PRINT, "Insert the skill to list by:\n");
+    char skill[50];
+    r = askInput(fd, skill, sizeof(skill));
+    if (r <= 0) return r;
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        char *skills = database_get(database, i, COLUMN_SKILLS);
+        if (strstr(skills, skill)) {
+            printProfile(fd, database, i);
+        }
+        free(skills);
     }
     sendCmd(fd, CMD_PRINT, "------ END OF LIST ------\n");
 
@@ -260,17 +281,19 @@ static int insertProfile(int fd, Database *database) {
 }
 
 static int handleMenuOption(int fd, Database *database, const char *message) {
-    if ((strcmp(message, "1")) == 0) {
+    if (strcmp(message, "1") == 0) {
         return insertProfile(fd, database);
-    } else if ((strcmp(message, "2")) == 0) {
+    } else if (strcmp(message, "2") == 0) {
         return listByCourse(fd, database);
-    } else if ((strcmp(message, "3")) == 0) {
+    } else if (strcmp(message, "3") == 0) {
+        return listBySkill(fd, database);
+    } if (strcmp(message, "4") == 0) {
         return listByYear(fd, database);
-    } else if ((strcmp(message, "4")) == 0) {
+    } else if (strcmp(message, "5") == 0) {
         return listEverything(fd, database);
-    } else if ((strcmp(message, "5")) == 0) {
+    } else if (strcmp(message, "6") == 0) {
         return listByEmail(fd, database);
-    } else if ((strcmp(message, "6")) == 0) {
+    } else if (strcmp(message, "7") == 0) {
         return removeByEmail(fd, database);
     } else {
         return sendCmd(fd, CMD_PRINT, "Unknown message\n");
