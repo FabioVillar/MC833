@@ -122,6 +122,47 @@ static void printProfile(int fd, Database *database, int row) {
     free(skills);
 }
 
+/// Print only name and email
+static void printNameAndEmail(int fd, Database *database, int row) {
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+
+    char buf[BUFFER_SIZE];
+    snprintf(buf, BUFFER_SIZE,
+             "-------------------------\n"
+             "Email: %s\n"
+             "Name: %s %s\n",
+             email, firstName, lastName);
+    sendCmd(fd, CMD_PRINT, buf);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+}
+
+/// Print graduation field, name and email
+static void printCourseNameAndEmail(int fd, Database *database, int row) {
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+    char *graduation = database_get(database, row, COLUMN_GRADUATION);
+
+    char buf[BUFFER_SIZE];
+    snprintf(buf, BUFFER_SIZE,
+             "-------------------------\n"
+             "Email: %s\n"
+             "Name: %s %s\n"
+             "Graduation Field: %s\n",
+             email, firstName, lastName, graduation);
+    sendCmd(fd, CMD_PRINT, buf);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+    free(graduation);
+}
+
 static int listByCourse(int fd, Database *database) {
     int r;
     sendCmd(fd, CMD_PRINT, "Insert the course to list by:\n");
@@ -133,7 +174,7 @@ static int listByCourse(int fd, Database *database) {
     for (int i = 0; i < rows; i++) {
         char *graduation = database_get(database, i, COLUMN_GRADUATION);
         if (strcmp(graduation, course) == 0) {
-            printProfile(fd, database, i);
+            printNameAndEmail(fd, database, i);
         }
         free(graduation);
     }
@@ -153,7 +194,7 @@ static int listBySkill(int fd, Database *database) {
     for (int i = 0; i < rows; i++) {
         char *skills = database_get(database, i, COLUMN_SKILLS);
         if (strstr(skills, skill)) {
-            printProfile(fd, database, i);
+            printNameAndEmail(fd, database, i);
         }
         free(skills);
     }
@@ -173,7 +214,7 @@ static int listByYear(int fd, Database *database) {
     for (int i = 0; i < rows; i++) {
         char *gradYear = database_get(database, i, COLUMN_GRAD_YEAR);
         if (strcmp(gradYear, year) == 0) {
-            printProfile(fd, database, i);
+            printCourseNameAndEmail(fd, database, i);
         }
         free(gradYear);
     }
