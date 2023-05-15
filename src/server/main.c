@@ -3,7 +3,8 @@
 #include <stdlib.h>
 #include <unistd.h>
 
-#include "accept_thread.h"
+#include "chat.h"
+#include "database.h"
 
 #define DEFAULT_PORT 8082
 
@@ -30,15 +31,6 @@ int main(int argc, char **argv) {
     if (!database) return 1;
     database_load(database, DATABASE_FILE);
 
-    AcceptThread *acceptThread = startAcceptThread(port, database);
-    if (!acceptThread) return 1;
-
-    signal(SIGINT, signalHandler);
-    while (!shouldStop) {
-        pause();
-    }
-
-    stopAcceptThread(acceptThread);
     database_free(database);
 
     return 0;

@@ -1,4 +1,4 @@
-#include "chat_thread.h"
+#include "chat.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,75 +21,7 @@ static const char MENU[] =
     "6 - Given an email, list all information of it\n"
     "7 - Given an email, remove a profile\n";
 
-typedef struct {
-    Database *database;
-    int fd;
-} Params;
-
-/// Sends a command to the client.
-///
-/// Returns less than zero in case of error.
-static int sendCmd(int fd, const char *cmd, const char *params) {
-    char buf[BUFFER_SIZE];
-    if (params) {
-        snprintf(buf, BUFFER_SIZE, "%s %s", cmd, params);
-        printf("[%d] sending: %s ...\n", fd, cmd);
-    } else {
-        strncpy(buf, cmd, BUFFER_SIZE);
-        printf("[%d] sending: %s\n", fd, cmd);
-    }
-
-    // send strlen(buf) plus the null terminator
-    int size = strlen(buf) + 1;
-    int sent = 0;
-    while (sent < size) {
-        int r = write(fd, &buf[sent], size - sent);
-        if (r <= 0) return r;
-        // we sent "r" bytes
-        sent += r;
-    }
-
-    return size;
-}
-
-/// Asks the client for input.
-///
-/// Returns less than zero in case of error.
-static int askInput(int fd, char *buf, int bufSize) {
-    int r;
-    if ((r = sendCmd(fd, CMD_INPUT, NULL)) < 0) {
-        return r;
-    }
-
-    int received = 0;
-    for (;;) {
-        if (received >= bufSize - 1) {
-            // string too large
-            return -1;
-        }
-
-        r = read(fd, &buf[received], bufSize - received);
-        if (r <= 0) return r;
-        // we read "r" bytes
-        received += r;
-
-        // check if we received a null terminator
-        if (buf[received - 1] == 0) {
-            break;
-        }
-    }
-
-    // check if contains a tab
-    if (strchr(buf, '\t')) {
-        sendCmd(fd, CMD_PRINT, "Nao deve conter tab");
-        return -1;
-    }
-
-    printf("[%d] received: %s\n", fd, buf);
-
-    return received;
-}
-
+/*
 /// Print a row as a profile
 static void printProfile(int fd, Database *database, int row) {
     char *email = database_get(database, row, COLUMN_EMAIL);
@@ -359,23 +291,4 @@ static void runChat(Params *params) {
 
     printf("[%d] connection closed\n", fd);
 }
-
-/// Callback do pthread
-static void *chatThread(void *x) {
-    runChat((Params *)x);
-    free(x);
-    return NULL;
-}
-
-int startChatThread(pthread_t *thread, Database *database, int fd) {
-    int r;
-    pthread_attr_t attr;
-
-    Params *params = malloc(sizeof(Params));
-    params->fd = fd;
-    params->database = database;
-
-    if ((r = pthread_attr_init(&attr)) < 0) return r;
-
-    return pthread_create(thread, &attr, chatThread, params);
-}
+*/

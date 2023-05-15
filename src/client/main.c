@@ -8,8 +8,10 @@
 #include <unistd.h>  // read(), write(), close()
 
 // #define DEBUG
+#define SERVER_IP "127.0.0.1"
+#define SERVER_PORT 8082
+
 #define BUFFER_SIZE 1024
-#define DEFAULT_PORT 8082
 #define SA struct sockaddr
 
 #define CMD_PRINT "print"
@@ -21,68 +23,41 @@
 #define DEBUG_PRINT(...)
 #endif
 
-typedef struct {
-    int fd;
-    // Buffer circular
-    char receiveBuffer[BUFFER_SIZE];
-    int receiveBufferFilled;
-} Client;
-
-/// Sends a string to the server.
+/// Sends bytes to the server and waits for acknowledgement.
 ///
 /// Returns less than zero in case of error.
-static int sendString(int fd, const char *buf) {
-    DEBUG_PRINT("Sending: %s\n", buf);
+static int sendData(int fd, void *buf, int size) {
+    char recvBuffer[1];
+    int r;
 
-    // send strlen(buf) plus the null terminator
-    int size = strlen(buf) + 1;
-    int sent = 0;
-    while (sent < size) {
-        int r = write(fd, &buf[sent], size - sent);
-        if (r <= 0) return r;
-        // we sent "r" bytes
-        sent += r;
-    }
+    r = write(fd, buf, size);
+    if (r <= 0) return r;
 
-    return size;
+    r = read(fd, recvBuffer, 1);
+    if (r == 0) return 1; // datagram size 0 means it's an ack
+
+    return -1;
 }
 
-/// Receives a string from the server.
-///
-/// Returns less than zero in case of error.
-static int receiveString(Client *client, char *buf, int bufSize) {
-    for (;;) {
-        if (client->receiveBufferFilled != 0) {
-            // check if we received a null terminator
-            char *terminator = memchr(client->receiveBuffer, '\0', BUFFER_SIZE);
-            if (terminator != NULL) {
-                int terminatorIndex = terminator - client->receiveBuffer;
-                strncpy(buf, client->receiveBuffer, bufSize);
-                memmove(client->receiveBuffer,
-                        client->receiveBuffer + terminatorIndex + 1,
-                        BUFFER_SIZE - terminatorIndex);
-                client->receiveBufferFilled -= terminatorIndex + 1;
+/// Receives bytes from the server.
+static int receiveData(int fd, void *buf, int bufSize) {
+    int readSize;
+    int r;
 
-                DEBUG_PRINT("Received: %s\n", buf);
+    r = read(fd, buf, bufSize);
+    if (r <= 0) return r;
+    readSize = r;
+    
+    // send ack
+    // datagram size 0 means it's an ack
+    r = write(fd, NULL, 0);
+    if (r < 0) return r;
 
-                return terminatorIndex - 1;
-            }
-        }
-
-        DEBUG_PRINT("Waiting for server\n");
-
-        int r = read(client->fd,
-                &client->receiveBuffer[client->receiveBufferFilled],
-                BUFFER_SIZE - client->receiveBufferFilled);
-        if (r <= 0) return r;
-
-        // we read "r" bytes
-        client->receiveBufferFilled += r;
-    }
+    return readSize;
 }
 
 /// Read user input until newline.
-static void stdinLine(char *buf, int size) {
+static int stdinLine(char *buf, int size) {
     int i = 0;
 
     for (;;) {
@@ -90,7 +65,7 @@ static void stdinLine(char *buf, int size) {
 
         if (c == '\n' || c == EOF) {
             buf[i] = '\0';
-            return;
+            return i;
         }
 
         if (i < size - 1) {
@@ -101,18 +76,17 @@ static void stdinLine(char *buf, int size) {
 }
 
 /// Executes the client. Returns non-zero if an error occurred.
-static int runClient(int sockfd) {
-    Client client;
+static int runClient(int fd) {
     char buf[BUFFER_SIZE];
     char cmd[BUFFER_SIZE];
     char param[BUFFER_SIZE];
     int r;
 
-    client.fd = sockfd;
-    client.receiveBufferFilled = 0;
+    r = sendData(fd, "connect", 8);
+    if (r <= 0) return r;
 
     for (;;) {
-        if ((r = receiveString(&client, buf, BUFFER_SIZE)) <= 0) {
+        if ((r = receiveData(fd, buf, BUFFER_SIZE)) <= 0) {
             return r;
         }
 
@@ -133,8 +107,8 @@ static int runClient(int sockfd) {
             printf("%s", param);
         } else if (strcmp(cmd, CMD_INPUT) == 0) {
             printf("> ");
-            stdinLine(buf, BUFFER_SIZE);
-            if ((r = sendString(sockfd, buf)) <= 0) return r;
+            int lineSize = stdinLine(buf, BUFFER_SIZE);
+            if ((r = sendData(fd, buf, lineSize + 1)) <= 0) return r;
         } else {
             printf("Unknown command: %s", cmd);
         }
@@ -142,54 +116,55 @@ static int runClient(int sockfd) {
 }
 
 int main(int argc, char **argv) {
+    const char *ip;
     int port;
     switch (argc) {
     case 1:
-        port = DEFAULT_PORT;
+        ip = SERVER_IP;
+        port = SERVER_PORT;
         break;
-    case 2:
-        port = atoi(argv[1]);
+    case 3:
+        ip = argv[1];
+        port = atoi(argv[2]);
         break;
     default:
-        printf("Usage: %s [port]\n", argv[0]);
+        printf("Usage: %s [ip] [port]\n", argv[0]);
         return 1;
     }
 
     // assign IP, PORT
     struct sockaddr_in servaddr = {};
     servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+    servaddr.sin_addr.s_addr = inet_addr(ip);
     servaddr.sin_port = htons(port);
 
+    // socket create and verification
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (sockfd == -1) {
+        printf("Socket creation failed.\n");
+        exit(0);
+    }
+
     for (;;) {
-        // socket create and verification
-        int sockfd = socket(AF_INET, SOCK_STREAM, 0);
-        if (sockfd == -1) {
-            printf("Socket creation failed.\n");
+        // try to connect in a loop
+        if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0) {
+            printf("Connection with the server failed.\n");
             exit(0);
         }
-
-        // try to connect in a loop
-        while (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0) {
-            printf("Connection with the server failed.\n");
-            sleep(1);
-        }
-
-        printf("Connected to the server.\n");
 
         // execute client code
         int r = runClient(sockfd);
 
-        // close the socket
-        close(sockfd);
-
-        if (r == 0) {
-            // successful exit
-            printf("Connection closed\n");
-            return 0;
-        } else {
-            // connection error
+        if (r < 0) {
             printf("Connection error\n");
+            sleep(1);
         }
     }
+
+    // close the socket
+    close(sockfd);
+
+    // successful exit
+    printf("Connection closed\n");
+    return 0;
 }
