@@ -11,21 +11,28 @@
 
 #define DEFAULT_PORT 8082
 
-static int acceptData(int sockfd, ChatList *chatlist) {
+static void acceptData(int sockfd, ChatList *chatlist) {
     struct sockaddr_in clientaddr;
     char buf[BUFFER_SIZE];
     int r;
     socklen_t clientaddrSize = sizeof(clientaddr);
 
-    r = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr,
-                 &clientaddrSize);
-    if (r <= 0) return r;
+    for (;;) {
+        r = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr,
+                    &clientaddrSize);
+        if (r <= 0) return;
 
-    Chat *chat =
-        chatlist_get(chatlist, clientaddr.sin_addr.s_addr, clientaddr.sin_port);
-    chat_handleData(chat, buf, r);
+        int readSize = r;
 
-    return 0;
+        // Send ack
+        r = sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&clientaddr,
+                clientaddrSize);
+        if (r < 0) return;
+
+        Chat *chat =
+            chatlist_get(chatlist, clientaddr.sin_addr.s_addr, clientaddr.sin_port);
+        chat_handleData(chat, buf, readSize);
+    }
 }
 
 // Driver function
@@ -56,8 +63,8 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
-        printf("Connection with the server failed.\n");
+    if (bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
+        printf("Bind failed.\n");
         return 1;
     }
 

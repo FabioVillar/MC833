@@ -1,4 +1,5 @@
 #include <arpa/inet.h>  // inet_addr()
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -7,8 +8,8 @@
 #include <unistd.h>  // read(), write(), close()
 
 // #define DEBUG
-#define SERVER_IP "127.0.0.1"
-#define SERVER_PORT 8082
+#define DEFAULT_IP "127.0.0.1"
+#define DEFAULT_PORT 8082
 
 #define BUFFER_SIZE 1024
 #define SA struct sockaddr
@@ -46,25 +47,13 @@ static int sendData(int fd, void *buf, int size) {
         r = recvWithTimeout(fd, 5, recvBuffer, 1);
         if (r == 0) return 1;  // datagram size 0 means it's an ack
 
-        DEBUG_PRINT("Timeout: trying again");
+        if (errno == ETIMEDOUT) {
+            DEBUG_PRINT("Timeout: trying again\n");
+        } else {
+            DEBUG_PRINT("Error: %d\n", errno);
+            return r;
+        }
     }
-}
-
-/// Receives bytes from the server.
-static int receiveData(int fd, void *buf, int bufSize) {
-    int readSize;
-    int r;
-
-    r = recvWithTimeout(fd, 30, buf, bufSize);
-    if (r < 0) return r;
-    readSize = r;
-
-    // send ack
-    // datagram size 0 means it's an ack
-    r = send(fd, NULL, 0, 0);
-    if (r < 0) return r;
-
-    return readSize;
 }
 
 /// Read user input until newline.
@@ -93,11 +82,15 @@ static int runClient(int fd) {
     char param[BUFFER_SIZE];
     int r;
 
+    printf("Connecting to server\n");
+
     r = sendData(fd, "connect", 8);
     if (r <= 0) return r;
 
+    printf("Connected\n");
+
     for (;;) {
-        if ((r = receiveData(fd, buf, BUFFER_SIZE)) <= 0) {
+        if ((r = recvWithTimeout(fd, 5, buf, BUFFER_SIZE)) <= 0) {
             return r;
         }
 
@@ -131,8 +124,8 @@ int main(int argc, char **argv) {
     int port;
     switch (argc) {
     case 1:
-        ip = SERVER_IP;
-        port = SERVER_PORT;
+        ip = DEFAULT_IP;
+        port = DEFAULT_PORT;
         break;
     case 3:
         ip = argv[1];
