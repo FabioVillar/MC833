@@ -30,10 +30,10 @@ static int sendData(int fd, void *buf, int size) {
     char recvBuffer[1];
     int r;
 
-    r = write(fd, buf, size);
+    r = send(fd, buf, size, 0);
     if (r <= 0) return r;
 
-    r = read(fd, recvBuffer, 1);
+    r = recv(fd, recvBuffer, 1, 0);
     if (r == 0) return 1; // datagram size 0 means it's an ack
 
     return -1;
@@ -44,13 +44,13 @@ static int receiveData(int fd, void *buf, int bufSize) {
     int readSize;
     int r;
 
-    r = read(fd, buf, bufSize);
+    r = recv(fd, buf, bufSize, 0);
     if (r <= 0) return r;
     readSize = r;
     
     // send ack
     // datagram size 0 means it's an ack
-    r = write(fd, NULL, 0);
+    r = send(fd, NULL, 0, 0);
     if (r < 0) return r;
 
     return readSize;

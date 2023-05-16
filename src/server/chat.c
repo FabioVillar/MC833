@@ -1,9 +1,6 @@
 #include "chat.h"
 
-#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 #define BUFFER_SIZE 1024
 
@@ -20,6 +17,49 @@ static const char MENU[] =
     "5 - List all informations of all profiles\n"
     "6 - Given an email, list all information of it\n"
     "7 - Given an email, remove a profile\n";
+
+typedef enum {
+    UNINIT,
+    WAITING_MENU,
+
+    INSERTPROFILE_WAITING_EMAIL,
+    INSERTPROFILE_WAITING_NAME,
+    INSERTPROFILE_WAITING_LASTNAME,
+    INSERTPROFILE_WAITING_CITY,
+    INSERTPROFILE_WAITING_GRADFIELD,
+    INSERTPROFILE_WAITING_GRADYEAR,
+    INSERTPROFILE_WAITING_SKILLS,
+
+    LISTBYCOURSE_WAITING_GRADFIELD,
+
+    LISTBYSKILL_WAITING_SKILL,
+
+    LISTBYYEAR_WAITING_GRADYEAR,
+
+    LISTBYEMAIL_WAITING_EMAIL,
+
+    REMOVEBYEMAIL_WAITING_EMAIL,
+} State;
+
+struct Chat {
+    State state;
+    Database *database;
+};
+
+Chat *chat_new(Database *database) {
+    Chat *chat = calloc(1, sizeof(Chat));
+    chat->state = UNINIT;
+    chat->database = database;
+    return chat;
+}
+
+void chat_free(Chat *chat) {
+    free(chat);
+}
+
+void chat_handleData(Chat *chat, void *data, int size) {
+    //
+}
 
 /*
 /// Print a row as a profile
