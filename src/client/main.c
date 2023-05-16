@@ -1,10 +1,9 @@
 #include <arpa/inet.h>  // inet_addr()
-#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>  // bzero()
 #include <sys/socket.h>
+#include <sys/time.h>
 #include <unistd.h>  // read(), write(), close()
 
 // #define DEBUG
@@ -23,6 +22,16 @@
 #define DEBUG_PRINT(...)
 #endif
 
+/// Reads with a timeout.
+static int recvWithTimeout(int fd, int timeout, void *buffer, int size) {
+    struct timeval tv;
+    tv.tv_sec = timeout;
+    tv.tv_usec = 0;
+    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+
+    return recv(fd, buffer, size, 0);
+}
+
 /// Sends bytes to the server and waits for acknowledgement.
 ///
 /// Returns less than zero in case of error.
@@ -30,13 +39,15 @@ static int sendData(int fd, void *buf, int size) {
     char recvBuffer[1];
     int r;
 
-    r = send(fd, buf, size, 0);
-    if (r <= 0) return r;
+    for (;;) {
+        r = send(fd, buf, size, 0);
+        if (r <= 0) return r;
 
-    r = recv(fd, recvBuffer, 1, 0);
-    if (r == 0) return 1; // datagram size 0 means it's an ack
+        r = recvWithTimeout(fd, 5, recvBuffer, 1);
+        if (r == 0) return 1;  // datagram size 0 means it's an ack
 
-    return -1;
+        DEBUG_PRINT("Timeout: trying again");
+    }
 }
 
 /// Receives bytes from the server.
@@ -44,10 +55,10 @@ static int receiveData(int fd, void *buf, int bufSize) {
     int readSize;
     int r;
 
-    r = recv(fd, buf, bufSize, 0);
-    if (r <= 0) return r;
+    r = recvWithTimeout(fd, 30, buf, bufSize);
+    if (r < 0) return r;
     readSize = r;
-    
+
     // send ack
     // datagram size 0 means it's an ack
     r = send(fd, NULL, 0, 0);
