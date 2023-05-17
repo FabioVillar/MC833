@@ -1,57 +1,18 @@
-#include <arpa/inet.h>  // inet_addr()
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>  // read(), write(), close()
 
-// #define DEBUG
+#include "client.h"
+
 #define DEFAULT_IP "127.0.0.1"
 #define DEFAULT_PORT 8082
 
-#define BUFFER_SIZE 1024
-#define SA struct sockaddr
-
-#define CMD_PRINT "print"
-#define CMD_INPUT "input"
-
-#ifdef DEBUG
-#define DEBUG_PRINT(...) printf("** DEBUG ** " __VA_ARGS__)
-#else
-#define DEBUG_PRINT(...)
-#endif
-
-/// Reads with a timeout.
-static int recvWithTimeout(int fd, int timeout, void *buffer, int size) {
-    struct timeval tv;
-    tv.tv_sec = timeout;
-    tv.tv_usec = 0;
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    return recv(fd, buffer, size, 0);
-}
-
-/// Sends bytes to the server and waits for acknowledgement.
-///
-/// Returns less than zero in case of error.
-static int sendData(int fd, void *buf, int size) {
-    char recvBuffer[BUFFER_SIZE];
-    int r;
-
+/// Ask user to press enter to continue.
+static void waitForEnter() {
     for (;;) {
-        r = send(fd, buf, size, 0);
-        if (r <= 0) return r;
+        char c = getchar();
 
-        r = recvWithTimeout(fd, 5, recvBuffer, BUFFER_SIZE);
-        if (r == 4 && memcmp(recvBuffer, "ack", 4) == 0) return 1;
-
-        if (errno == ETIMEDOUT) {
-            DEBUG_PRINT("Timeout: trying again\n");
-        } else {
-            printf("Error: %d\n", errno);
-            return r;
+        if (c == '\n' || c == EOF) {
+            return;
         }
     }
 }
@@ -60,6 +21,7 @@ static int sendData(int fd, void *buf, int size) {
 static int stdinLine(char *buf, int size) {
     int i = 0;
 
+    printf("> ");
     for (;;) {
         char c = getchar();
 
@@ -75,49 +37,190 @@ static int stdinLine(char *buf, int size) {
     }
 }
 
-/// Executes the client. Returns non-zero if an error occurred.
-static int runClient(int fd) {
-    char buf[BUFFER_SIZE];
-    int r;
+static void insertProfile(Client *client) {
+    char params[1024];
+    int size = 0;
 
-    send(fd, "connect", 8, 0);
+    printf("Insert email\n");
+    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+
+    printf("Insert first name\n");
+    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+
+    printf("Insert last name\n");
+    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+
+    printf("Insert city\n");
+    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+
+    printf("Insert graduation course\n");
+    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+
+    printf("Insert graduation year\n");
+    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+
+    printf("Insert skills (Ex.: Skill1,Skill2,Skill3,etc)\n");
+    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+
+    printf("Sending to server...\n");
+    int r = client_sendMessage(client, "insert", params, size);
+    if (r < 0) {
+        printf("Failure! Press Enter to continue.\n");
+    } else {
+        printf("Success! Press Enter to continue.\n");
+    }
+    waitForEnter();
+}
+
+static void listByCourse(Client *client) {
+    char param[1024];
+
+    printf("Insert graduation course\n");
+    int size = stdinLine(param, sizeof(param)) + 1;
+
+    printf("Sending to server...\n");
+    int r = client_sendMessage(client, "listByCourse", param, size);
+    if (r < 0) {
+        printf("Failure! Press Enter to continue.\n");
+    } else {
+        printf("Success! Press Enter to continue.\n");
+    }
+    waitForEnter();
+}
+
+static void listBySkill(Client *client) {
+    char param[1024];
+
+    printf("Insert skill\n");
+    int size = stdinLine(param, sizeof(param)) + 1;
+
+    printf("Sending to server...\n");
+    int r = client_sendMessage(client, "listBySkill", param, size);
+    if (r < 0) {
+        printf("Failure! Press Enter to continue.\n");
+    } else {
+        printf("Success! Press Enter to continue.\n");
+    }
+    waitForEnter();
+}
+
+static void listByYear(Client *client) {
+    char param[1024];
+
+    printf("Insert graduation year\n");
+    int size = stdinLine(param, sizeof(param)) + 1;
+
+    printf("Sending to server...\n");
+    int r = client_sendMessage(client, "listByYear", param, size);
+    if (r < 0) {
+        printf("Failure! Press Enter to continue.\n");
+    } else {
+        printf("Success! Press Enter to continue.\n");
+    }
+    waitForEnter();
+}
+
+static void listAll(Client *client) {
+    printf("Sending to server...\n");
+    int r = client_sendMessage(client, "listAll", NULL, 0);
+    if (r < 0) {
+        printf("Failure! Press Enter to continue.\n");
+    } else {
+        printf("Success! Press Enter to continue.\n");
+    }
+    waitForEnter();
+}
+
+static void listByEmail(Client *client) {
+    char param[1024];
+
+    printf("Insert email\n");
+    int size = stdinLine(param, sizeof(param)) + 1;
+
+    printf("Sending to server...\n");
+    int r = client_sendMessage(client, "listByEmail", param, size);
+    if (r < 0) {
+        printf("Failure! Press Enter to continue.\n");
+    } else {
+        printf("Success! Press Enter to continue.\n");
+    }
+    waitForEnter();
+}
+
+static void removeByEmail(Client *client) {
+    char param[1024];
+
+    printf("Insert email\n");
+    int size = stdinLine(param, sizeof(param)) + 1;
+
+    printf("Sending to server...\n");
+    int r = client_sendMessage(client, "removeByEmail", param, size);
+    if (r < 0) {
+        printf("Failure! Press Enter to continue.\n");
+    } else {
+        printf("Success! Press Enter to continue.\n");
+    }
+    waitForEnter();
+}
+
+/// Executes the client
+static void runClient(Client *client) {
+    char buf[8];
 
     for (;;) {
-        r = recvWithTimeout(fd, 1, buf, BUFFER_SIZE);
-        if (r <= 0) return r;
+        // Show the menu
+        printf(
+            "\nMENU\n"
+            "Write a number accordingly to what you want:\n"
+            "1 - Insert a new profile in the system\n"
+            "2 - List all people graduated in a specific course\n"
+            "3 - List all people with a given skill\n"
+            "4 - List all people graduated in a specific year\n"
+            "5 - List all informations of all profiles\n"
+            "6 - Given an email, list all information of it\n"
+            "7 - Given an email, remove a profile\n"
+            "8 - Exit\n");
 
-        // buf must contain a nul terminator
-        if (!memchr(buf, '\0', r)) {
-            return -1;
-        }
-
-        const char *cmd = buf;
-        int sizeCmd = strlen(cmd);
-        const void *param = &buf[sizeCmd + 1];
-        int sizeParam = r - sizeCmd - 1;
-
-        // Decide next action based on cmd
-        if (strcmp(cmd, CMD_PRINT) == 0) {
-            // param must contain a nul terminator
-            if (!memchr(param, '\0', sizeParam)) {
-                return -1;
-            }
-
-            // send ack
-            send(fd, "ack", 4, 0);
-
-            printf("%s", (const char *)param);
-        } else if (strcmp(cmd, CMD_INPUT) == 0) {
-            printf("> ");
-
-            strcpy(buf, "data");
-            int lineSize = stdinLine(&buf[5], BUFFER_SIZE);
-
-            if ((r = sendData(fd, buf, lineSize + 6)) <= 0) {
-                return r;
+        int size = stdinLine(buf, sizeof(buf));
+        int error = 0;
+        if (size == 0) {
+            continue;
+        } else if (size == 1) {
+            switch (buf[0]) {
+            case '1':
+                insertProfile(client);
+                break;
+            case '2':
+                listByCourse(client);
+                break;
+            case '3':
+                listBySkill(client);
+                break;
+            case '4':
+                listByYear(client);
+                break;
+            case '5':
+                listAll(client);
+                break;
+            case '6':
+                listByEmail(client);
+                break;
+            case '7':
+                removeByEmail(client);
+                break;
+            case '8':
+                return;
+            default:
+                error = 1;
+                break;
             }
         } else {
-            printf("Unknown command: %s", cmd);
+            error = 1;
+        }
+
+        if (error) {
+            printf("Invalid input. Press Enter to continue.\n");
+            waitForEnter();
         }
     }
 }
@@ -139,41 +242,9 @@ int main(int argc, char **argv) {
         return 1;
     }
 
-    // assign IP, PORT
-    struct sockaddr_in servaddr = {};
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(ip);
-    servaddr.sin_port = htons(port);
-
-    // socket create and verification
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd == -1) {
-        printf("Socket creation failed.\n");
-        exit(0);
-    }
-
-    for (;;) {
-        // try to connect in a loop
-        if (connect(sockfd, (SA *)&servaddr, sizeof(servaddr)) != 0) {
-            printf("Connection with the server failed.\n");
-            exit(0);
-        }
-
-        // execute client code
-        int r = runClient(sockfd);
-
-        if (r < 0) {
-            send(sockfd, "close", 6, 0);
-            printf("Connection error\n");
-            sleep(1);
-        } else {
-            printf("Connection closed\n");
-            break;
-        }
-    }
-
-    // close the socket
-    close(sockfd);
+    Client *client = client_new(ip, port);
+    runClient(client);
+    client_free(client);
 
     return 0;
 }

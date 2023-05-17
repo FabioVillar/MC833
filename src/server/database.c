@@ -77,6 +77,7 @@ static const char *row_getColumn(const Row *row, Column column) {
 Database *database_new() {
     // calloc initializes to 0
     Database *database = calloc(1, sizeof(Database));
+    if (!database) exit(-1);
     pthread_mutex_init(&database->mutex, NULL);
     return database;
 }
