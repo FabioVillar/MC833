@@ -111,8 +111,9 @@ static int runClient(int fd) {
             printf("%s", param);
         } else if (strcmp(cmd, CMD_INPUT) == 0) {
             printf("> ");
-            int lineSize = stdinLine(buf, BUFFER_SIZE);
-            if ((r = sendData(fd, buf, lineSize + 1)) <= 0) return r;
+            strcpy(buf, "data");
+            int lineSize = stdinLine(&buf[5], BUFFER_SIZE);
+            if ((r = sendData(fd, buf, lineSize + 6)) <= 0) return r;
         } else {
             printf("Unknown command: %s", cmd);
         }
@@ -160,6 +161,7 @@ int main(int argc, char **argv) {
         int r = runClient(sockfd);
 
         if (r < 0) {
+            send(sockfd, "close", 6, 0);
             printf("Connection error\n");
             sleep(1);
         }

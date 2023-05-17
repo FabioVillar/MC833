@@ -1,6 +1,8 @@
+#include <arpa/inet.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <unistd.h>
 
 #include "chat.h"
@@ -11,6 +13,11 @@
 
 #define DEFAULT_PORT 8082
 
+static void sendAck(int sockfd, struct sockaddr_in *clientaddr) {
+    sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&clientaddr,
+           sizeof(struct sockaddr_in));
+}
+
 static void acceptData(int sockfd, ChatList *chatlist) {
     struct sockaddr_in clientaddr;
     char buf[BUFFER_SIZE];
@@ -18,20 +25,36 @@ static void acceptData(int sockfd, ChatList *chatlist) {
     socklen_t clientaddrSize = sizeof(clientaddr);
 
     for (;;) {
-        r = recvfrom(sockfd, buf, BUFFER_SIZE, 0, (struct sockaddr *)&clientaddr,
-                    &clientaddrSize);
+        r = recvfrom(sockfd, buf, BUFFER_SIZE, 0,
+                     (struct sockaddr *)&clientaddr, &clientaddrSize);
         if (r <= 0) return;
 
         int readSize = r;
+        char address[64];
+        inet_ntop(clientaddr.sin_family, &clientaddr.sin_addr, address,
+                  sizeof(address));
+        int addressSize = strlen(address);
+        if (addressSize >= 64) return;
+        snprintf(&address[addressSize], 64 - addressSize, ":%d",
+                 clientaddr.sin_port);
 
-        // Send ack
-        r = sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&clientaddr,
-                clientaddrSize);
-        if (r < 0) return;
-
-        Chat *chat =
-            chatlist_get(chatlist, clientaddr.sin_addr.s_addr, clientaddr.sin_port);
-        chat_handleData(chat, buf, readSize);
+        if (readSize == 8 && memcmp(buf, "connect", 8) == 0) {
+            printf("[%s] New connection\n", address);
+            chatlist_createChat(chatlist, address);
+            sendAck(sockfd, &clientaddr);
+        } else if (readSize == 6 && memcmp(buf, "close", 6) == 0) {
+            printf("[%s] Closed\n", address);
+            chatlist_removeChat(chatlist, address);
+        } else if (readSize >= 5 && memcmp(buf, "data", 5)) {
+            printf("[%s] Received data\n", address);
+            Chat *chat = chatlist_findChat(chatlist, address);
+            if (chat) {
+                chat_handleData(chat, &buf[5], readSize - 5);
+                sendAck(sockfd, &clientaddr);
+            }
+        } else {
+            printf("[%s] Received unknown message\n", address);
+        }
     }
 }
 

@@ -1,8 +1,6 @@
 #ifndef CHATLIST_H
 #define CHATLIST_H
 
-#include <arpa/inet.h>
-
 #include "chat.h"
 #include "database.h"
 
@@ -12,6 +10,10 @@ ChatList *chatlist_new(Database *database);
 
 void chatlist_free(ChatList *chatlist);
 
-Chat *chatlist_get(ChatList *chatlist, in_addr_t address, in_port_t port);
+void chatlist_createChat(ChatList *chatlist, const char *address);
+
+void chatlist_removeChat(ChatList *chatlist, const char *address);
+
+Chat *chatlist_findChat(ChatList *chatlist, const char *address);
 
 #endif
