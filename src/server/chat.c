@@ -1,6 +1,10 @@
+#define _GNU_SOURCE  // enables strdup
+
 #include "chat.h"
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #define BUFFER_SIZE 1024
 
@@ -18,42 +22,42 @@ static const char MENU[] =
     "6 - Given an email, list all information of it\n"
     "7 - Given an email, remove a profile\n";
 
-typedef enum {
-    UNINIT,
-    WAITING_MENU,
+static int sendCmd(Chat *chat, const char *cmd, const void *value,
+                   int sizeValue) {
+    char buf[BUFFER_SIZE];
 
-    INSERTPROFILE_WAITING_EMAIL,
-    INSERTPROFILE_WAITING_NAME,
-    INSERTPROFILE_WAITING_LASTNAME,
-    INSERTPROFILE_WAITING_CITY,
-    INSERTPROFILE_WAITING_GRADFIELD,
-    INSERTPROFILE_WAITING_GRADYEAR,
-    INSERTPROFILE_WAITING_SKILLS,
+    int sizeCmd = strlen(cmd) + 1;
+    int size = sizeValue + sizeCmd;
+    if (size > BUFFER_SIZE) return -1;
 
-    LISTBYCOURSE_WAITING_GRADFIELD,
+    strcpy(buf, cmd);
+    memcpy(&buf[sizeCmd], value, sizeValue);
 
-    LISTBYSKILL_WAITING_SKILL,
+    printf("[%s] Sending %s ...\n", chat->addressString, cmd);
 
-    LISTBYYEAR_WAITING_GRADYEAR,
+    return sendto(chat->fd, buf, size, 0, (struct sockaddr *)&chat->address,
+                  sizeof(struct sockaddr_in));
+}
 
-    LISTBYEMAIL_WAITING_EMAIL,
-
-    REMOVEBYEMAIL_WAITING_EMAIL,
-} State;
-
-struct Chat {
-    State state;
-    Database *database;
-};
-
-Chat *chat_new(Database *database) {
+Chat *chat_new(int fd, struct sockaddr_in *address, const char *addressString,
+               Database *database) {
     Chat *chat = calloc(1, sizeof(Chat));
+    if (!chat) return NULL;
+
     chat->state = UNINIT;
+    memcpy(&chat->address, address, sizeof(struct sockaddr_in));
+    chat->addressString = strdup(addressString);
+    chat->fd = fd;
     chat->database = database;
+
+    sendCmd(chat, CMD_INPUT, MENU, strlen(MENU) + 1);
+    chat->state = WAITING_MENU;
+
     return chat;
 }
 
 void chat_free(Chat *chat) {
+    free(chat->addressString);
     free(chat);
 }
 

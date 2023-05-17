@@ -50,7 +50,7 @@ static int sendData(int fd, void *buf, int size) {
         if (errno == ETIMEDOUT) {
             DEBUG_PRINT("Timeout: trying again\n");
         } else {
-            DEBUG_PRINT("Error: %d\n", errno);
+            printf("Error: %d\n", errno);
             return r;
         }
     }
@@ -78,8 +78,6 @@ static int stdinLine(char *buf, int size) {
 /// Executes the client. Returns non-zero if an error occurred.
 static int runClient(int fd) {
     char buf[BUFFER_SIZE];
-    char cmd[BUFFER_SIZE];
-    char param[BUFFER_SIZE];
     int r;
 
     printf("Connecting to server\n");
@@ -90,26 +88,37 @@ static int runClient(int fd) {
     printf("Connected\n");
 
     for (;;) {
-        if ((r = recvWithTimeout(fd, 5, buf, BUFFER_SIZE)) <= 0) {
-            return r;
+        r = recvWithTimeout(fd, 5, buf, BUFFER_SIZE);
+        if (r <= 0) return r;
+
+        // buf must contain a nul terminator
+        if (!memchr(buf, '\0', r)) {
+            return -1;
         }
 
-        // Separate first word in cmd and rest in
-        // param
-        char *firstSpace = strchr(buf, ' ');
-        if (firstSpace != NULL) {
-            int firstSpaceIndex = firstSpace - buf;
-            strncpy(cmd, buf, firstSpaceIndex);
-            strncpy(param, firstSpace + 1, BUFFER_SIZE);
-        } else {
-            strncpy(cmd, buf, BUFFER_SIZE);
-            param[0] = '\0';
-        }
+        const char *cmd = buf;
+        int sizeCmd = strlen(cmd);
+        const void *param = &buf[sizeCmd + 1];
+        int sizeParam = r - sizeCmd - 1;
 
         // Decide next action based on cmd
         if (strcmp(cmd, CMD_PRINT) == 0) {
-            printf("%s", param);
+            // param must contain a nul terminator
+            if (!memchr(param, '\0', sizeParam)) {
+                return -1;
+            }
+
+            printf("%s", (const char *)param);
         } else if (strcmp(cmd, CMD_INPUT) == 0) {
+            if (sizeParam != 0) {
+                // param must contain a nul terminator
+                if (!memchr(param, '\0', sizeParam)) {
+                    return -1;
+                }
+
+                printf("%s", (const char *)param);
+            }
+
             printf("> ");
             strcpy(buf, "data");
             int lineSize = stdinLine(&buf[5], BUFFER_SIZE);
@@ -164,13 +173,14 @@ int main(int argc, char **argv) {
             send(sockfd, "close", 6, 0);
             printf("Connection error\n");
             sleep(1);
+        } else {
+            printf("Connection closed\n");
+            break;
         }
     }
 
     // close the socket
     close(sockfd);
 
-    // successful exit
-    printf("Connection closed\n");
     return 0;
 }

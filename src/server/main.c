@@ -14,11 +14,11 @@
 #define DEFAULT_PORT 8082
 
 static void sendAck(int sockfd, struct sockaddr_in *clientaddr) {
-    sendto(sockfd, NULL, 0, 0, (struct sockaddr *)&clientaddr,
+    sendto(sockfd, NULL, 0, 0, (struct sockaddr *)clientaddr,
            sizeof(struct sockaddr_in));
 }
 
-static void acceptData(int sockfd, ChatList *chatlist) {
+static void acceptData(int sockfd, ChatList *chatlist, Database *database) {
     struct sockaddr_in clientaddr;
     char buf[BUFFER_SIZE];
     int r;
@@ -30,30 +30,34 @@ static void acceptData(int sockfd, ChatList *chatlist) {
         if (r <= 0) return;
 
         int readSize = r;
-        char address[64];
-        inet_ntop(clientaddr.sin_family, &clientaddr.sin_addr, address,
-                  sizeof(address));
-        int addressSize = strlen(address);
+        char addressString[64];
+        inet_ntop(clientaddr.sin_family, &clientaddr.sin_addr, addressString,
+                  sizeof(addressString));
+        int addressSize = strlen(addressString);
         if (addressSize >= 64) return;
-        snprintf(&address[addressSize], 64 - addressSize, ":%d",
+        snprintf(&addressString[addressSize], 64 - addressSize, ":%d",
                  clientaddr.sin_port);
 
         if (readSize == 8 && memcmp(buf, "connect", 8) == 0) {
-            printf("[%s] New connection\n", address);
-            chatlist_createChat(chatlist, address);
+            printf("[%s] New connection\n", addressString);
             sendAck(sockfd, &clientaddr);
+
+            Chat *chat = chat_new(sockfd, &clientaddr, addressString, database);
+            if (!chat) return;
+
+            chatlist_insertChat(chatlist, chat);
         } else if (readSize == 6 && memcmp(buf, "close", 6) == 0) {
-            printf("[%s] Closed\n", address);
-            chatlist_removeChat(chatlist, address);
-        } else if (readSize >= 5 && memcmp(buf, "data", 5)) {
-            printf("[%s] Received data\n", address);
-            Chat *chat = chatlist_findChat(chatlist, address);
+            printf("[%s] Closed\n", addressString);
+            chatlist_removeChat(chatlist, addressString);
+        } else if (readSize >= 5 && memcmp(buf, "data", 5) == 0) {
+            printf("[%s] Received data\n", addressString);
+            Chat *chat = chatlist_findChat(chatlist, addressString);
             if (chat) {
-                chat_handleData(chat, &buf[5], readSize - 5);
                 sendAck(sockfd, &clientaddr);
+                chat_handleData(chat, &buf[5], readSize - 5);
             }
         } else {
-            printf("[%s] Received unknown message\n", address);
+            printf("[%s] Received unknown message\n", addressString);
         }
     }
 }
@@ -95,8 +99,8 @@ int main(int argc, char **argv) {
     if (!database) return 1;
     database_load(database, DATABASE_FILE);
 
-    ChatList *chatlist = chatlist_new(database);
-    acceptData(sockfd, chatlist);
+    ChatList *chatlist = chatlist_new();
+    acceptData(sockfd, chatlist, database);
     chatlist_free(chatlist);
 
     database_free(database);

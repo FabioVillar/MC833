@@ -1,5 +1,3 @@
-#define _GNU_SOURCE  // enables strdup
-
 #include "chatlist.h"
 
 #include <stdlib.h>
@@ -11,26 +9,23 @@
 typedef struct HashBucket {
     struct HashBucket *next;
     int hash;
-    char *address;
     Chat *chat;
 } HashBucket;
 
-static HashBucket *hashbucket_new(int hash, const char *address) {
+static HashBucket *hashbucket_new(int hash, Chat *chat) {
     HashBucket *bucket = calloc(1, sizeof(HashBucket));
     bucket->hash = hash;
-    bucket->address = strdup(address);
+    bucket->chat = chat;
     return bucket;
 }
 
 static void hashbucket_free(HashBucket *bucket) {
     if (bucket->next) hashbucket_free(bucket->next);
     chat_free(bucket->chat);
-    free(bucket->address);
     free(bucket);
 }
 
 struct ChatList {
-    Database *database;
     HashBucket *hashTable[HASH_TABLE_SIZE];
 };
 
@@ -45,10 +40,8 @@ static int djb2(const char *data) {
     return hash % HASH_TABLE_SIZE;
 }
 
-ChatList *chatlist_new(Database *database) {
-    ChatList *chatlist = calloc(1, sizeof(ChatList));
-    chatlist->database = database;
-    return chatlist;
+ChatList *chatlist_new() {
+    return calloc(1, sizeof(ChatList));
 }
 
 void chatlist_free(ChatList *chatlist) {
@@ -59,23 +52,23 @@ void chatlist_free(ChatList *chatlist) {
     free(chatlist);
 }
 
-void chatlist_createChat(ChatList *chatlist, const char *address) {
-    int hash = djb2(address);
+void chatlist_insertChat(ChatList *chatlist, Chat *chat) {
+    int hash = djb2(chat->addressString);
 
     HashBucket **bucketLoc = &chatlist->hashTable[hash];
     while (*bucketLoc) {
         HashBucket *bucket = *bucketLoc;
 
-        if (strcmp(address, bucket->address) == 0) {
-            hashbucket_free(bucket);
-            *bucketLoc = NULL;
-            break;
+        if (strcmp(chat->addressString, bucket->chat->addressString) == 0) {
+            chat_free(bucket->chat);
+            bucket->chat = chat;
+            return;
         }
 
         *bucketLoc = bucket->next;
     }
 
-    *bucketLoc = hashbucket_new(hash, address);
+    *bucketLoc = hashbucket_new(hash, chat);
 }
 
 void chatlist_removeChat(ChatList *chatlist, const char *address) {
@@ -85,7 +78,7 @@ void chatlist_removeChat(ChatList *chatlist, const char *address) {
     while (*bucketLoc) {
         HashBucket *bucket = *bucketLoc;
 
-        if (strcmp(address, bucket->address) == 0) {
+        if (strcmp(address, bucket->chat->addressString) == 0) {
             hashbucket_free(bucket);
             *bucketLoc = NULL;
             return;
@@ -102,7 +95,7 @@ Chat *chatlist_findChat(ChatList *chatlist, const char *address) {
     while (*bucketLoc) {
         HashBucket *bucket = *bucketLoc;
 
-        if (strcmp(address, bucket->address) == 0) {
+        if (strcmp(address, bucket->chat->addressString) == 0) {
             return bucket->chat;
         }
 
