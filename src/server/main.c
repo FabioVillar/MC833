@@ -13,11 +13,6 @@
 
 #define DEFAULT_PORT 8082
 
-static void sendAck(int sockfd, struct sockaddr_in *clientaddr) {
-    sendto(sockfd, NULL, 0, 0, (struct sockaddr *)clientaddr,
-           sizeof(struct sockaddr_in));
-}
-
 static void acceptData(int sockfd, ChatList *chatlist, Database *database) {
     struct sockaddr_in clientaddr;
     char buf[BUFFER_SIZE];
@@ -27,7 +22,7 @@ static void acceptData(int sockfd, ChatList *chatlist, Database *database) {
     for (;;) {
         r = recvfrom(sockfd, buf, BUFFER_SIZE, 0,
                      (struct sockaddr *)&clientaddr, &clientaddrSize);
-        if (r <= 0) return;
+        if (r < 0) return;
 
         int readSize = r;
         char addressString[64];
@@ -40,7 +35,6 @@ static void acceptData(int sockfd, ChatList *chatlist, Database *database) {
 
         if (readSize == 8 && memcmp(buf, "connect", 8) == 0) {
             printf("[%s] New connection\n", addressString);
-            sendAck(sockfd, &clientaddr);
 
             Chat *chat = chat_new(sockfd, &clientaddr, addressString, database);
             if (!chat) return;
@@ -53,8 +47,13 @@ static void acceptData(int sockfd, ChatList *chatlist, Database *database) {
             printf("[%s] Received data\n", addressString);
             Chat *chat = chatlist_findChat(chatlist, addressString);
             if (chat) {
-                sendAck(sockfd, &clientaddr);
                 chat_handleData(chat, &buf[5], readSize - 5);
+            }
+        } else if (readSize == 4 && memcmp(buf, "ack", 4) == 0) {
+            printf("[%s] Received acknowledgment\n", addressString);
+            Chat *chat = chatlist_findChat(chatlist, addressString);
+            if (chat) {
+                chat_handleAck(chat);
             }
         } else {
             printf("[%s] Received unknown message\n", addressString);

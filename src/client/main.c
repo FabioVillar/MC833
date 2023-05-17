@@ -37,15 +37,15 @@ static int recvWithTimeout(int fd, int timeout, void *buffer, int size) {
 ///
 /// Returns less than zero in case of error.
 static int sendData(int fd, void *buf, int size) {
-    char recvBuffer[1];
+    char recvBuffer[BUFFER_SIZE];
     int r;
 
     for (;;) {
         r = send(fd, buf, size, 0);
         if (r <= 0) return r;
 
-        r = recvWithTimeout(fd, 5, recvBuffer, 1);
-        if (r == 0) return 1;  // datagram size 0 means it's an ack
+        r = recvWithTimeout(fd, 5, recvBuffer, BUFFER_SIZE);
+        if (r == 4 && memcmp(recvBuffer, "ack", 4) == 0) return 1;
 
         if (errno == ETIMEDOUT) {
             DEBUG_PRINT("Timeout: trying again\n");
@@ -80,15 +80,10 @@ static int runClient(int fd) {
     char buf[BUFFER_SIZE];
     int r;
 
-    printf("Connecting to server\n");
-
-    r = sendData(fd, "connect", 8);
-    if (r <= 0) return r;
-
-    printf("Connected\n");
+    send(fd, "connect", 8, 0);
 
     for (;;) {
-        r = recvWithTimeout(fd, 5, buf, BUFFER_SIZE);
+        r = recvWithTimeout(fd, 1, buf, BUFFER_SIZE);
         if (r <= 0) return r;
 
         // buf must contain a nul terminator
@@ -108,21 +103,19 @@ static int runClient(int fd) {
                 return -1;
             }
 
+            // send ack
+            send(fd, "ack", 4, 0);
+
             printf("%s", (const char *)param);
         } else if (strcmp(cmd, CMD_INPUT) == 0) {
-            if (sizeParam != 0) {
-                // param must contain a nul terminator
-                if (!memchr(param, '\0', sizeParam)) {
-                    return -1;
-                }
-
-                printf("%s", (const char *)param);
-            }
-
             printf("> ");
+
             strcpy(buf, "data");
             int lineSize = stdinLine(&buf[5], BUFFER_SIZE);
-            if ((r = sendData(fd, buf, lineSize + 6)) <= 0) return r;
+
+            if ((r = sendData(fd, buf, lineSize + 6)) <= 0) {
+                return r;
+            }
         } else {
             printf("Unknown command: %s", cmd);
         }

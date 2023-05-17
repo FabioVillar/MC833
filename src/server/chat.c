@@ -39,6 +39,29 @@ static int sendCmd(Chat *chat, const char *cmd, const void *value,
                   sizeof(struct sockaddr_in));
 }
 
+static int handleMenuOption(Chat *chat, const char *message) {
+    /* if (strcmp(message, "1") == 0) {
+        return insertProfile(fd, database);
+    } else if (strcmp(message, "2") == 0) {
+        return listByCourse(fd, database);
+    } else if (strcmp(message, "3") == 0) {
+        return listBySkill(fd, database);
+    }
+    if (strcmp(message, "4") == 0) {
+        return listByYear(fd, database);
+    } else if (strcmp(message, "5") == 0) {
+        return listEverything(fd, database);
+    } else if (strcmp(message, "6") == 0) {
+        return listByEmail(fd, database);
+    } else if (strcmp(message, "7") == 0) {
+        return removeByEmail(fd, database);
+    } else {
+        return sendCmd(fd, CMD_PRINT, "Unknown message\n");
+    } */
+
+    return -1;
+}
+
 Chat *chat_new(int fd, struct sockaddr_in *address, const char *addressString,
                Database *database) {
     Chat *chat = calloc(1, sizeof(Chat));
@@ -50,8 +73,8 @@ Chat *chat_new(int fd, struct sockaddr_in *address, const char *addressString,
     chat->fd = fd;
     chat->database = database;
 
-    sendCmd(chat, CMD_INPUT, MENU, strlen(MENU) + 1);
-    chat->state = WAITING_MENU;
+    sendCmd(chat, CMD_PRINT, MENU, strlen(MENU) + 1);
+    chat->state = WAITING_MENU_ACK;
 
     return chat;
 }
@@ -61,8 +84,30 @@ void chat_free(Chat *chat) {
     free(chat);
 }
 
-void chat_handleData(Chat *chat, void *data, int size) {
-    //
+int chat_handleData(Chat *chat, void *data, int size) {
+    switch (chat->state) {
+    case WAITING_MENU:
+        // data must contain a nul terminator
+        if (!memchr(data, '\0', size)) {
+            return -1;
+        }
+        return handleMenuOption(chat, (const char *)data);
+
+    default:
+        return -1;
+    }
+}
+
+int chat_handleAck(Chat *chat) {
+    switch (chat->state) {
+    case WAITING_MENU_ACK:
+        sendCmd(chat, CMD_INPUT, "menu", 5);
+        chat->state = WAITING_MENU;
+        return 1;
+
+    default:
+        return -1;
+    }
 }
 
 /*
@@ -297,25 +342,7 @@ static int insertProfile(int fd, Database *database) {
     return 1;
 }
 
-static int handleMenuOption(int fd, Database *database, const char *message) {
-    if (strcmp(message, "1") == 0) {
-        return insertProfile(fd, database);
-    } else if (strcmp(message, "2") == 0) {
-        return listByCourse(fd, database);
-    } else if (strcmp(message, "3") == 0) {
-        return listBySkill(fd, database);
-    } if (strcmp(message, "4") == 0) {
-        return listByYear(fd, database);
-    } else if (strcmp(message, "5") == 0) {
-        return listEverything(fd, database);
-    } else if (strcmp(message, "6") == 0) {
-        return listByEmail(fd, database);
-    } else if (strcmp(message, "7") == 0) {
-        return removeByEmail(fd, database);
-    } else {
-        return sendCmd(fd, CMD_PRINT, "Unknown message\n");
-    }
-}
+
 
 /// Lógica da thread
 static void runChat(Params *params) {
