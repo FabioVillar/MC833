@@ -17,6 +17,6 @@ int server_sendMessage(Server *server, const struct sockaddr_in *address,
 /// Receives a message. cmd must have size at least 8.
 /// Error: returns -1
 int server_recvMessage(Server *server, struct sockaddr_in *address, char *cmd,
-                       void *param, int paramSize);
+                       void *param, int *paramSize);
 
 #endif

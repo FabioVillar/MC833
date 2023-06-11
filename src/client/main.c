@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "client.h"
 
@@ -63,6 +64,8 @@ static void insertProfile(Client *client) {
     size += stdinLine(&params[size], sizeof(params) - size) + 1;
 
     printf("Sending to server...\n");
+
+    // Send strings separated by null terminator
     int r = client_sendMessage(client, "insert", params, size);
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
@@ -73,13 +76,13 @@ static void insertProfile(Client *client) {
 }
 
 static void listByCourse(Client *client) {
-    char param[1024];
+    char graduation[64];
 
     printf("Insert graduation course\n");
-    int size = stdinLine(param, sizeof(param)) + 1;
+    int size = stdinLine(graduation, sizeof(graduation)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listByCourse", param, size);
+    int r = client_sendMessage(client, "listByCourse", graduation, size);
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -89,13 +92,13 @@ static void listByCourse(Client *client) {
 }
 
 static void listBySkill(Client *client) {
-    char param[1024];
+    char skill[128];
 
     printf("Insert skill\n");
-    int size = stdinLine(param, sizeof(param)) + 1;
+    int size = stdinLine(skill, sizeof(skill)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listBySkill", param, size);
+    int r = client_sendMessage(client, "listBySkill", skill, size);
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -105,13 +108,13 @@ static void listBySkill(Client *client) {
 }
 
 static void listByYear(Client *client) {
-    char param[1024];
+    char gradYear[64];
 
     printf("Insert graduation year\n");
-    int size = stdinLine(param, sizeof(param)) + 1;
+    int size = stdinLine(gradYear, sizeof(gradYear)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listByYear", param, size);
+    int r = client_sendMessage(client, "listByYear", gradYear, size);
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -132,13 +135,13 @@ static void listAll(Client *client) {
 }
 
 static void listByEmail(Client *client) {
-    char param[1024];
+    char email[128];
 
     printf("Insert email\n");
-    int size = stdinLine(param, sizeof(param)) + 1;
+    int size = stdinLine(email, sizeof(email)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listByEmail", param, size);
+    int r = client_sendMessage(client, "listByEmail", email, size);
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -148,13 +151,13 @@ static void listByEmail(Client *client) {
 }
 
 static void removeByEmail(Client *client) {
-    char param[1024];
+    char email[128];
 
     printf("Insert email\n");
-    int size = stdinLine(param, sizeof(param)) + 1;
+    int size = stdinLine(email, sizeof(email)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "removeByEmail", param, size);
+    int r = client_sendMessage(client, "removeByEmail", email, size);
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {

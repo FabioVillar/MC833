@@ -1,11 +1,53 @@
 #include <errno.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "database.h"
 #include "server.h"
 
 #define DEFAULT_PORT 8082
+
+/// Iterator is formatted as "<string1>\0<string2>..."
+/// - If <string1> exists, return it.
+/// - Advance the iterator.
+static const char *advanceString(const char **iterator, int *iteratorSize) {
+    const char *string = *iterator;
+    if (!string) {
+        return NULL;
+    }
+
+    const char *nextNul = memchr(string, '\0', *iteratorSize);
+    if (nextNul) {
+        *iterator = nextNul + 1;
+        *iteratorSize -= nextNul + 1 - string;
+        return string;
+    } else {
+        *iteratorSize = 0;
+        *iterator = NULL;
+        return NULL;
+    }
+}
+
+static void insertProfile(Database *database, const char *param,
+                          int paramSize) {
+    const char *email = advanceString(&param, &paramSize);
+    const char *firstName = advanceString(&param, &paramSize);
+    const char *lastName = advanceString(&param, &paramSize);
+    const char *city = advanceString(&param, &paramSize);
+    const char *graduation = advanceString(&param, &paramSize);
+    const char *gradYear = advanceString(&param, &paramSize);
+    const char *skills = advanceString(&param, &paramSize);
+
+    if (!email || !firstName || !lastName || !city || !graduation ||
+        !gradYear || !skills) {
+        return;
+    }
+
+    database_addRow(database, email, firstName, lastName, city, graduation,
+                    gradYear, skills);
+    database_save(database, DATABASE_FILE);
+}
 
 static void runServer(Server *server, Database *database) {
     char cmd[8] = {};
@@ -15,16 +57,21 @@ static void runServer(Server *server, Database *database) {
     struct sockaddr_in clientaddr;
 
     for (;;) {
-        r = server_recvMessage(server, &clientaddr, cmd, param, sizeof(param));
+        int paramSize = sizeof(param);
+        r = server_recvMessage(server, &clientaddr, cmd, param, &paramSize);
         if (r < 0) {
-            if (errno == ETIMEDOUT) {
+            switch (errno) {
+            case EAGAIN:
+            case ETIMEDOUT:
                 continue;
-            } else {
+            default:
+                printf("%s\n", strerror(errno));
                 return;
             }
         }
 
         if (strcmp(cmd, "insert") == 0) {
+            insertProfile(database, param, sizeof(param));
         } else if (strcmp(cmd, "listByCourse") == 0) {
         } else if (strcmp(cmd, "listBySkill") == 0) {
         } else if (strcmp(cmd, "listByYear") == 0) {

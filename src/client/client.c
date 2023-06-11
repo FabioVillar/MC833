@@ -10,6 +10,13 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 32000
+//#define DEBUG
+
+#ifdef DEBUG
+#define DEBUG_PRINT(...) printf(__VA_ARGS__)
+#else
+#define DEBUG_PRINT(...)
+#endif
 
 struct Client {
     int fd;
@@ -65,11 +72,13 @@ int client_sendMessage(Client *client, const char *cmd, const void *param,
     memcpy(&client->sendBuffer[r + 1], param, paramSize);
 
     for (;;) {
+        DEBUG_PRINT("client_sendMessage: send(%s ...)\n", client->sendBuffer);
         r = send(client->fd, client->sendBuffer, size, 0);
         if (r < 0) return -1;
 
         r = recv(client->fd, client->recvBuffer, BUFFER_SIZE, 0);
         if (r < 0) {
+            DEBUG_PRINT("client_sendMessage: %s\n", strerror(errno));
             if (errno == ETIMEDOUT) {
                 continue;
             } else {
@@ -78,7 +87,11 @@ int client_sendMessage(Client *client, const char *cmd, const void *param,
         }
 
         // Not a string: ignore
-        if (!memchr(client->recvBuffer, '\0', r)) continue;
+        if (!memchr(client->recvBuffer, '\0', r)) {
+            DEBUG_PRINT("client_sendMessage: recv not a string\n");
+            continue;
+        }
+        DEBUG_PRINT("client_sendMessage: recv(%s ...)\n", client->recvBuffer);
 
         int receivedMsgId;
         sscanf(client->recvBuffer, "%x %7s", &receivedMsgId, receivedCmd);
@@ -119,7 +132,7 @@ int client_recvMessage(Client *client, char *cmd, void *param, int paramSize) {
         if (dataSize > paramSize) return -1;
         memcpy(param, &client->recvBuffer[13], dataSize);
 
-        int sendSize = sprintf(client->sendBuffer, "%08x ack", msgId);
+        int sendSize = sprintf(client->sendBuffer, "%08x ack", msgId) + 1;
         r = send(client->fd, client->sendBuffer, sendSize, 0);
         if (r < 0) return -1;
 
