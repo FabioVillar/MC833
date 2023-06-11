@@ -1,3 +1,5 @@
+#define _GNU_SOURCE  // enables some functions
+
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,32 +12,25 @@
 
 #define BUFFER_SIZE 1024
 
-static const char endOfList[] = "------ END OF LIST ------\n";
+/// Iterate over the lines of a string
+static char *nextLine(const char **lineIterator) {
+    const char *line = *lineIterator;
 
-/// Iterator is formatted as "<string1>\0<string2>..."
-/// - If <string1> exists, return it.
-/// - Advance the iterator.
-static const char *advanceString(const void **iterator, int *iteratorSize) {
-    const void *string = *iterator;
-    if (!string) {
-        return NULL;
-    }
+    if (!line) return NULL;
 
-    const void *nextNul = memchr(string, '\0', *iteratorSize);
-    if (nextNul) {
-        *iterator = nextNul + 1;
-        *iteratorSize -= nextNul + 1 - string;
-        return (const char *)string;
+    char *newLine = strchr(line, '\n');
+    if (newLine) {
+        *lineIterator = newLine + 1;
+        return strndup(line, newLine - line);
     } else {
-        *iteratorSize = 0;
-        *iterator = NULL;
-        return NULL;
+        *lineIterator = NULL;
+        return strdup(line);
     }
 }
 
 /// Print a row as a profile
-static void printProfile(Server *server, Database *database,
-                         struct sockaddr_in *clientaddr, int row) {
+static int printProfile(char *buffer, int bufferSize, Database *database,
+                        struct sockaddr_in *clientaddr, int row) {
     char *email = database_get(database, row, COLUMN_EMAIL);
     char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
     char *lastName = database_get(database, row, COLUMN_LAST_NAME);
@@ -44,9 +39,8 @@ static void printProfile(Server *server, Database *database,
     char *gradYear = database_get(database, row, COLUMN_GRAD_YEAR);
     char *skills = database_get(database, row, COLUMN_SKILLS);
 
-    char buf[BUFFER_SIZE];
-    int r = snprintf(buf, BUFFER_SIZE,
-                     "-------------------------\n"
+    int r = snprintf(buffer, bufferSize,
+                     "------------------------\n"
                      "Email: %s\n"
                      "First Name: %s\n"
                      "Last Name: %s\n"
@@ -56,9 +50,97 @@ static void printProfile(Server *server, Database *database,
                      "Skills: %s\n",
                      email, firstName, lastName, city, graduation, gradYear,
                      skills);
-    Message *message = message_new(clientaddr, "print", buf, r + 1);
-    server_sendMessage(server, message);
-    message_free(message);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+    free(city);
+    free(graduation);
+    free(gradYear);
+    free(skills);
+
+    return r;
+}
+
+/// Print only name and email
+static int printNameAndEmail(char *buffer, int bufferSize, Database *database,
+                             int row) {
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+
+    int r = snprintf(buffer, bufferSize,
+                     "------------------------\n"
+                     "Email: %s\n"
+                     "Name: %s %s\n",
+                     email, firstName, lastName);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+
+    return r;
+}
+
+/// Print graduation field, name and email
+static int printCourseNameAndEmail(char *buffer, int bufferSize,
+                                    Database *database, int row) {
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+    char *graduation = database_get(database, row, COLUMN_GRADUATION);
+
+    int r = snprintf(buffer, bufferSize,
+                     "------------------------\n"
+                     "Email: %s\n"
+                     "Name: %s %s\n"
+                     "Graduation Field: %s\n",
+                     email, firstName, lastName, graduation);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+    free(graduation);
+
+    return r;
+}
+
+/// Print graduation field, name and email
+static int printEndOfList(char *buffer, int bufferSize) {
+    return snprintf(buffer, bufferSize, "------ END OF LIST -----\n");
+}
+
+static void insertProfile(Server *server, Database *database,
+                          const Request *request) {
+    const char *iterator = request->data;
+    char *email = nextLine(&iterator);
+    char *firstName = nextLine(&iterator);
+    char *lastName = nextLine(&iterator);
+    char *city = nextLine(&iterator);
+    char *graduation = nextLine(&iterator);
+    char *gradYear = nextLine(&iterator);
+    char *skills = nextLine(&iterator);
+
+    if (email && firstName && lastName && city && graduation && gradYear &&
+        skills) {
+        switch (database_addRow(database, email, firstName, lastName, city,
+                                graduation, gradYear, skills)) {
+        case DB_OK:
+            database_save(database, DATABASE_FILE);
+            server_sendResponse_str(server, request, "Success\n");
+            break;
+        case DB_FULL:
+            server_sendResponse_str(server, request, "Database is full\n");
+            break;
+        case DB_ALREADY_EXISTS:
+            server_sendResponse_str(server, request,
+                                    "E-mail is already registered\n");
+            break;
+        default:
+            server_sendResponse_str(server, request, "Failed\n");
+            break;
+        }
+    }
 
     free(email);
     free(firstName);
@@ -69,104 +151,32 @@ static void printProfile(Server *server, Database *database,
     free(skills);
 }
 
-/// Print only name and email
-static void printNameAndEmail(Server *server, Database *database,
-                              const struct sockaddr_in *clientaddr, int row) {
-    char *email = database_get(database, row, COLUMN_EMAIL);
-    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
-    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
-
-    char buf[BUFFER_SIZE];
-    int r = snprintf(buf, BUFFER_SIZE,
-                     "-------------------------\n"
-                     "Email: %s\n"
-                     "Name: %s %s\n",
-                     email, firstName, lastName);
-    Message *message = message_new(clientaddr, "print", buf, r + 1);
-    server_sendMessage(server, message);
-    message_free(message);
-
-    free(email);
-    free(firstName);
-    free(lastName);
-}
-
-/// Print graduation field, name and email
-static void printCourseNameAndEmail(Server *server, Database *database,
-                                    const struct sockaddr_in *clientaddr,
-                                    int row) {
-    char *email = database_get(database, row, COLUMN_EMAIL);
-    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
-    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
-    char *graduation = database_get(database, row, COLUMN_GRADUATION);
-
-    char buf[BUFFER_SIZE];
-    int r = snprintf(buf, BUFFER_SIZE,
-                     "-------------------------\n"
-                     "Email: %s\n"
-                     "Name: %s %s\n"
-                     "Graduation Field: %s\n",
-                     email, firstName, lastName, graduation);
-    Message *message = message_new(clientaddr, "print", buf, r + 1);
-    server_sendMessage(server, message);
-    message_free(message);
-
-    free(email);
-    free(firstName);
-    free(lastName);
-    free(graduation);
-}
-
-static void insertProfile(Database *database, const Message *message) {
-    const void *param = message->param;
-    int paramSize = message->paramSize;
-
-    const char *email = advanceString(&param, &paramSize);
-    const char *firstName = advanceString(&param, &paramSize);
-    const char *lastName = advanceString(&param, &paramSize);
-    const char *city = advanceString(&param, &paramSize);
-    const char *graduation = advanceString(&param, &paramSize);
-    const char *gradYear = advanceString(&param, &paramSize);
-    const char *skills = advanceString(&param, &paramSize);
-
-    if (!email || !firstName || !lastName || !city || !graduation ||
-        !gradYear || !skills) {
-        return;
-    }
-
-    database_addRow(database, email, firstName, lastName, city, graduation,
-                    gradYear, skills);
-    database_save(database, DATABASE_FILE);
-}
-
 static void listByCourse(Server *server, Database *database,
-                         const Message *message) {
-    const void *param = message->param;
-    int paramSize = message->paramSize;
+                         const Request *request) {
+    char buf[BUFFER_SIZE];
 
-    const char *course = advanceString(&param, &paramSize);
-
-    if (!course) return;
+    char *next = buf;
+    int remaining = BUFFER_SIZE;
 
     int rows = database_countRows(database);
     for (int i = 0; i < rows; i++) {
         char *graduation = database_get(database, i, COLUMN_GRADUATION);
-        if (strcmp(graduation, course) == 0) {
-            printNameAndEmail(server, database, &message->address, i);
+        if (strcmp(graduation, request->data) == 0) {
+            int r = printNameAndEmail(next, remaining, database, i);
+            next += r;
+            remaining -= r;
         }
         free(graduation);
     }
+    printEndOfList(next, remaining);
 
-    Message *response =
-        message_new(&message->address, "print", endOfList, sizeof(endOfList));
-    server_sendMessage(server, response);
-    message_free(response);
+    server_sendResponse_str(server, request, buf);
 }
 
 static void runServer(Server *server, Database *database) {
     for (;;) {
-        Message *message = server_recvMessage(server);
-        if (!message) {
+        Request *request = server_recvRequest(server);
+        if (!request) {
             switch (errno) {
             case EAGAIN:
             case ETIMEDOUT:
@@ -177,12 +187,12 @@ static void runServer(Server *server, Database *database) {
             }
         }
 
-        const char *cmd = message->cmd;
+        const char *cmd = request->cmd;
 
         if (strcmp(cmd, "insert") == 0) {
-            insertProfile(database, message);
+            insertProfile(server, database, request);
         } else if (strcmp(cmd, "listByCourse") == 0) {
-            listByCourse(server, database, message);
+            listByCourse(server, database, request);
         } else if (strcmp(cmd, "listBySkill") == 0) {
         } else if (strcmp(cmd, "listByYear") == 0) {
         } else if (strcmp(cmd, "listAll") == 0) {
@@ -192,7 +202,7 @@ static void runServer(Server *server, Database *database) {
             printf("Received unknown message\n");
         }
 
-        message_free(message);
+        request_free(request);
     }
 }
 

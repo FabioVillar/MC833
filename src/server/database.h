@@ -16,6 +16,12 @@ typedef enum {
     COLUMN_COUNT,
 } Column;
 
+typedef enum {
+    DB_OK,
+    DB_ALREADY_EXISTS,
+    DB_FULL,
+} DatabaseResult;
+
 typedef struct Database Database;
 
 /// Cria um objeto database
@@ -41,10 +47,13 @@ void database_save(Database *database, const char *path);
 void database_clear(Database *database);
 
 /// Adiciona uma linha
-void database_addRow(Database *database, const char *email,
-                     const char *firstName, const char *lastName,
-                     const char *city, const char *graduation,
-                     const char *gradYear, const char *skills);
+///
+/// Falha caso o e-mail já exista no banco de dados ou o banco de dados
+/// esteja cheio.
+DatabaseResult database_addRow(Database *database, const char *email,
+                               const char *firstName, const char *lastName,
+                               const char *city, const char *graduation,
+                               const char *gradYear, const char *skills);
 
 /// Deleta uma linha
 void database_deleteRow(Database *database, int index);

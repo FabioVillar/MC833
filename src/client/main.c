@@ -39,42 +39,47 @@ static int stdinLine(char *buf, int size) {
 }
 
 static void insertProfile(Client *client) {
-    char params[1024];
-    int size = 0;
-
+    char email[128];
     printf("Insert email\n");
-    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+    stdinLine(email, sizeof(email));
 
+    char firstName[64];
     printf("Insert first name\n");
-    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+    stdinLine(firstName, sizeof(firstName));
 
+    char lastName[64];
     printf("Insert last name\n");
-    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+    stdinLine(lastName, sizeof(lastName));
 
+    char city[64];
     printf("Insert city\n");
-    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+    stdinLine(city, sizeof(city));
 
+    char graduation[64];
     printf("Insert graduation course\n");
-    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+    stdinLine(graduation, sizeof(graduation));
 
+    char gradYear[64];
     printf("Insert graduation year\n");
-    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+    stdinLine(gradYear, sizeof(gradYear));
 
+    char skills[128];
     printf("Insert skills (Ex.: Skill1,Skill2,Skill3,etc)\n");
-    size += stdinLine(&params[size], sizeof(params) - size) + 1;
+    stdinLine(skills, sizeof(skills));
 
-    printf("Sending to server...\n");
+    char params[1024];
+    snprintf(params, sizeof(params), "%s\n%s\n%s\n%s\n%s\n%s\n%s", email,
+             firstName, lastName, city, graduation, gradYear, skills);
 
-    // Send strings separated by null terminator
-    Message *message = message_new("insert", params, size);
-    int r = client_sendMessage(client, message);
-    message_free(message);
-
-    if (r < 0) {
-        printf("Failure! Press Enter to continue.\n");
+    Response *response = client_sendRequest(client, "insert", params);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
     } else {
-        printf("Success! Press Enter to continue.\n");
+        printf("Response timed out\n");
     }
+
+    printf("Press enter to continue.");
     waitForEnter();
 }
 
@@ -82,19 +87,17 @@ static void listByCourse(Client *client) {
     char graduation[64];
 
     printf("Insert graduation course\n");
-    int size = stdinLine(graduation, sizeof(graduation)) + 1;
+    stdinLine(graduation, sizeof(graduation));
 
-    printf("Sending to server...\n");
-
-    Message *message = message_new("listByCourse", graduation, size);
-    int r = client_sendMessage(client, message);
-    message_free(message);
-
-    if (r < 0) {
-        printf("Failure! Press Enter to continue.\n");
+    Response *response = client_sendRequest(client, "listByCourse", graduation);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
     } else {
-        printf("Success! Press Enter to continue.\n");
+        printf("Response timed out\n");
     }
+
+    printf("Press enter to continue.");
     waitForEnter();
 }
 
@@ -102,19 +105,17 @@ static void listBySkill(Client *client) {
     char skill[128];
 
     printf("Insert skill\n");
-    int size = stdinLine(skill, sizeof(skill)) + 1;
+    stdinLine(skill, sizeof(skill));
 
-    printf("Sending to server...\n");
-
-    Message *message = message_new("listBySkill", skill, size);
-    int r = client_sendMessage(client, message);
-    message_free(message);
-
-    if (r < 0) {
-        printf("Failure! Press Enter to continue.\n");
+    Response *response = client_sendRequest(client, "listBySkill", skill);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
     } else {
-        printf("Success! Press Enter to continue.\n");
+        printf("Response timed out\n");
     }
+
+    printf("Press enter to continue.");
     waitForEnter();
 }
 
@@ -122,34 +123,30 @@ static void listByYear(Client *client) {
     char gradYear[64];
 
     printf("Insert graduation year\n");
-    int size = stdinLine(gradYear, sizeof(gradYear)) + 1;
+    stdinLine(gradYear, sizeof(gradYear));
 
-    printf("Sending to server...\n");
-
-    Message *message = message_new("listByYear", gradYear, size);
-    int r = client_sendMessage(client, message);
-    message_free(message);
-
-    if (r < 0) {
-        printf("Failure! Press Enter to continue.\n");
+    Response *response = client_sendRequest(client, "listByYear", gradYear);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
     } else {
-        printf("Success! Press Enter to continue.\n");
+        printf("Response timed out\n");
     }
+
+    printf("Press enter to continue.");
     waitForEnter();
 }
 
 static void listAll(Client *client) {
-    printf("Sending to server...\n");
-
-    Message *message = message_new("listAll", NULL, 0);
-    int r = client_sendMessage(client, message);
-    message_free(message);
-
-    if (r < 0) {
-        printf("Failure! Press Enter to continue.\n");
+    Response *response = client_sendRequest(client, "listAll", NULL);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
     } else {
-        printf("Success! Press Enter to continue.\n");
+        printf("Response timed out\n");
     }
+
+    printf("Press enter to continue.");
     waitForEnter();
 }
 
@@ -157,19 +154,17 @@ static void listByEmail(Client *client) {
     char email[128];
 
     printf("Insert email\n");
-    int size = stdinLine(email, sizeof(email)) + 1;
+    stdinLine(email, sizeof(email));
 
-    printf("Sending to server...\n");
-
-    Message *message = message_new("listByEmail", email, size);
-    int r = client_sendMessage(client, message);
-    message_free(message);
-
-    if (r < 0) {
-        printf("Failure! Press Enter to continue.\n");
+    Response *response = client_sendRequest(client, "listByEmail", email);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
     } else {
-        printf("Success! Press Enter to continue.\n");
+        printf("Response timed out\n");
     }
+
+    printf("Press enter to continue.");
     waitForEnter();
 }
 
@@ -177,19 +172,17 @@ static void removeByEmail(Client *client) {
     char email[128];
 
     printf("Insert email\n");
-    int size = stdinLine(email, sizeof(email)) + 1;
+    stdinLine(email, sizeof(email));
 
-    printf("Sending to server...\n");
-
-    Message *message = message_new("removeByEmail", email, size);
-    int r = client_sendMessage(client, message);
-    message_free(message);
-
-    if (r < 0) {
-        printf("Failure! Press Enter to continue.\n");
+    Response *response = client_sendRequest(client, "removeByEmail", email);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
     } else {
-        printf("Success! Press Enter to continue.\n");
+        printf("Response timed out\n");
     }
+
+    printf("Press enter to continue.");
     waitForEnter();
 }
 

@@ -175,13 +175,26 @@ void database_clear(Database *database) {
     pthread_mutex_unlock(&database->mutex);
 }
 
-void database_addRow(Database *database, const char *email,
-                     const char *firstName, const char *lastName,
-                     const char *city, const char *graduation,
-                     const char *gradYear, const char *skills) {
+DatabaseResult database_addRow(Database *database, const char *email,
+                               const char *firstName, const char *lastName,
+                               const char *city, const char *graduation,
+                               const char *gradYear, const char *skills) {
+    DatabaseResult r = DB_OK;
+
     pthread_mutex_lock(&database->mutex);
 
-    if (database->nRows < DATABASE_MAX_ROWS) {
+    for (int i = 0; i < database->nRows; i++) {
+        if (strcmp(database->rows[i]->columns[COLUMN_EMAIL], email) == 0) {
+            r = DB_ALREADY_EXISTS;
+            break;
+        }
+    }
+
+    if (r == DB_OK && database->nRows >= DATABASE_MAX_ROWS) {
+        r = DB_FULL;
+    }
+
+    if (r == DB_OK) {
         Row *row = row_new(database);
         if (row) {
             row->columns[COLUMN_EMAIL] = strdup(email);
@@ -196,6 +209,8 @@ void database_addRow(Database *database, const char *email,
     }
 
     pthread_mutex_unlock(&database->mutex);
+
+    return r;
 }
 
 void database_deleteRow(Database *database, int index) {

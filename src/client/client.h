@@ -3,26 +3,19 @@
 
 typedef struct Client Client;
 
-typedef struct {
-    char *cmd;
-    void *param;
-    int paramSize;
-} Message;
+typedef struct Response Response;
 
-Message *message_new(const char *cmd, const void *param, int paramSize);
+void response_free(Response *response);
 
-void message_free(Message *message);
+/// Get the string from the response.
+const char *response_getString(Response *response);
 
 Client *client_new(const char *ip, int port);
 
 void client_free(Client *client);
 
-/// Send a message and waits for acknowledgement.
-/// Error: returns -1
-int client_sendMessage(Client *client, const Message *message);
-
-/// Receives a message. cmd must have size at least 8.
+/// Sends a request and waits for response.
 /// Error: returns null
-Message *client_recvMessage(Client *client);
+Response *client_sendRequest(Client *client, const char *cmd, const char *data);
 
 #endif

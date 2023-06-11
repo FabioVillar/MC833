@@ -12,7 +12,7 @@
 #include <unistd.h>
 
 #define BUFFER_SIZE 32000
-//#define DEBUG
+#define DEBUG
 
 #ifdef DEBUG
 #define DEBUG_PRINT(...) printf(__VA_ARGS__)
@@ -27,27 +27,19 @@ struct Client {
     char recvBuffer[BUFFER_SIZE];
 };
 
-Message *message_new(const char *cmd, const void *param, int paramSize) {
-    char *cmd2 = strdup(cmd);
-    void *param2 = malloc(paramSize);
-    if (!cmd2 || !param2) exit(-1);
+struct Response {
+    int dataSize;
+    char data[];
+};
 
-    memcpy(param2, param, paramSize);
+void response_free(Response *response) { free(response); }
 
-    Message *message = calloc(sizeof(Message), 1);
-    if (!message) exit(-1);
-
-    message->cmd = cmd2;
-    message->param = param2;
-    message->paramSize = paramSize;
-    
-    return message;
-}
-
-void message_free(Message *message) {
-    free(message->cmd);
-    free(message->param);
-    free(message);
+const char *response_getString(Response *response) {
+    if (response->data[response->dataSize - 1] == '\0') {
+        return response->data;
+    } else {
+        return "INVALID\n";
+    }
 }
 
 Client *client_new(const char *ip, int port) {
@@ -82,23 +74,25 @@ void client_free(Client *client) {
     free(client);
 }
 
-int client_sendMessage(Client *client, const Message *message) {
-    int r;
-    char receivedCmd[32];
-
+Response *client_sendRequest(Client *client, const char *cmd,
+                             const char *data) {
     int msgId = (client->nextMsgId++) & 0xFFFFFFFF;
 
-    r = sprintf(client->sendBuffer, "%08x %s", msgId, message->cmd);
+    int requestHeaderSize =
+        sprintf(client->sendBuffer, "%08x %s", msgId, cmd) + 1;
+    if (requestHeaderSize > BUFFER_SIZE) return NULL;
 
-    int size = r + 1 + message->paramSize;
-    if (size > BUFFER_SIZE) return -1;
-
-    memcpy(&client->sendBuffer[r + 1], message->param, message->paramSize);
+    int size = requestHeaderSize;
+    if (data) {
+        strncpy(&client->sendBuffer[requestHeaderSize], data,
+                BUFFER_SIZE - requestHeaderSize);
+        size += strlen(data) + 1;
+    }
 
     for (;;) {
         DEBUG_PRINT("client_sendMessage: send(%s ...)\n", client->sendBuffer);
-        r = send(client->fd, client->sendBuffer, size, 0);
-        if (r < 0) return -1;
+        int r = send(client->fd, client->sendBuffer, size, 0);
+        if (r < 0) return NULL;
 
         r = recv(client->fd, client->recvBuffer, BUFFER_SIZE, 0);
         if (r < 0) {
@@ -106,7 +100,7 @@ int client_sendMessage(Client *client, const Message *message) {
             if (errno == ETIMEDOUT) {
                 continue;
             } else {
-                return -1;
+                return NULL;
             }
         }
 
@@ -118,53 +112,17 @@ int client_sendMessage(Client *client, const Message *message) {
         DEBUG_PRINT("client_sendMessage: recv(%s ...)\n", client->recvBuffer);
 
         int receivedMsgId;
-        sscanf(client->recvBuffer, "%x %31s", &receivedMsgId, receivedCmd);
+        sscanf(client->recvBuffer, "%x", &receivedMsgId);
 
-        if (strcmp(receivedCmd, "ack") == 0) {
-            if (receivedMsgId == msgId) {
-                return 0;
-            }
-        }
+        int responseHeaderSize = strlen(client->recvBuffer) + 1;
+        int dataSize = r - responseHeaderSize;
+
+        Response *response = malloc(sizeof(Response) + dataSize);
+        if (!response) exit(-1);
+
+        response->dataSize = dataSize;
+        memcpy(response->data, &client->recvBuffer[responseHeaderSize],
+               dataSize);
+        return response;
     }
-}
-
-Message *client_recvMessage(Client *client) {
-    int r;
-    char cmd[32];
-
-    // Retry at most 8 times
-    for (int i = 0; i < 8; i++) {
-        r = recv(client->fd, client->recvBuffer, BUFFER_SIZE, 0);
-        if (r < 0) {
-            if (errno == ETIMEDOUT) {
-                continue;
-            } else {
-                return NULL;
-            }
-        }
-
-        // Not a string: ignore
-        if (!memchr(client->recvBuffer, '\0', r)) continue;
-
-        const char *header = client->recvBuffer;
-        int headerlen = strlen(header) + 1;
-
-        int msgId;
-        sscanf(header, "%x %31s", &msgId, cmd);
-
-        if (strcmp(cmd, "ack") == 0) {
-            continue;
-        }
-
-        int dataSize = r - headerlen;
-        if (dataSize < 0) return NULL;
-
-        int sendSize = sprintf(client->sendBuffer, "%08x ack", msgId) + 1;
-        r = send(client->fd, client->sendBuffer, sendSize, 0);
-        if (r < 0) return NULL;
-
-        return message_new(cmd, header + headerlen, dataSize);
-    }
-
-    return NULL;
 }
