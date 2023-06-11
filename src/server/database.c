@@ -1,4 +1,4 @@
-#define _GNU_SOURCE  // enables strdup, geline
+#define _GNU_SOURCE  // enables strdup
 
 #include "database.h"
 

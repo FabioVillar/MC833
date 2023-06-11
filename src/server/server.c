@@ -24,6 +24,32 @@ struct Server {
     char recvBuffer[BUFFER_SIZE];
 };
 
+Message *message_new(const struct sockaddr_in *address, const char *cmd,
+                     const void *param, int paramSize) {
+    char *cmd2 = strdup(cmd);
+    void *param2 = malloc(paramSize);
+    if (!cmd2 || !param2) exit(-1);
+
+    memcpy(param2, param, paramSize);
+
+    Message *message = calloc(sizeof(Message), 1);
+    if (!message) exit(-1);
+
+    message->cmd = cmd2;
+    message->param = param2;
+    message->paramSize = paramSize;
+
+    memcpy(&message->address, address, sizeof(struct sockaddr_in));
+
+    return message;
+}
+
+void message_free(Message *message) {
+    free(message->cmd);
+    free(message->param);
+    free(message);
+}
+
 Server *server_new(int port) {
     // assign IP, PORT
     struct sockaddr_in servaddr = {};
@@ -57,31 +83,44 @@ void server_free(Server *server) {
     free(server);
 }
 
-int server_sendMessage(Server *server, const struct sockaddr_in *address,
-                       const char *cmd, const void *param, int paramSize) {
+int server_sendMessage(Server *server, const Message *message) {
     int r;
-    char receivedCmd[8];
+    char receivedCmd[32];
 
     int msgId = (server->nextMsgId++) & 0xFFFFFFFF;
 
-    r = sprintf(server->sendBuffer, "%08x %s", msgId, cmd);
+    r = sprintf(server->sendBuffer, "%08x %s", msgId, message->cmd);
 
-    int size = r + 1 + paramSize;
+    int size = r + 1 + message->paramSize;
     if (size > BUFFER_SIZE) return -1;
 
-    memcpy(&server->sendBuffer[r + 1], param, paramSize);
+    memcpy(&server->sendBuffer[r + 1], message->param, message->paramSize);
 
     for (int i = 0; i < 8; i++) {
         DEBUG_PRINT("server_sendMessage: send(%s ...)\n", server->sendBuffer);
         r = sendto(server->fd, server->sendBuffer, size, 0,
-                   (const struct sockaddr *)address,
+                   (const struct sockaddr *)&message->address,
                    sizeof(struct sockaddr_in));
         if (r < 0) return -1;
 
-        struct sockaddr_in recvAddress;
-        socklen_t recvAddressSize = sizeof(struct sockaddr_in);
-        r = recvfrom(server->fd, server->recvBuffer, BUFFER_SIZE, 0,
-                     (struct sockaddr *)&recvAddress, &recvAddressSize);
+        for (;;) {
+            struct sockaddr_in recvAddress;
+            socklen_t recvAddressSize = sizeof(struct sockaddr_in);
+
+            r = recvfrom(server->fd, server->recvBuffer, BUFFER_SIZE, 0,
+                         (struct sockaddr *)&recvAddress, &recvAddressSize);
+
+            if (r < 0) break;
+
+            if (recvAddress.sin_addr.s_addr !=
+                    message->address.sin_addr.s_addr ||
+                recvAddress.sin_port != message->address.sin_port) {
+                // Message was from other address
+                // Keep listening
+                continue;
+            }
+        }
+
         if (r < 0) {
             if (errno == ETIMEDOUT) {
                 continue;
@@ -95,7 +134,7 @@ int server_sendMessage(Server *server, const struct sockaddr_in *address,
         DEBUG_PRINT("server_sendMessage: recv(%s ...)\n", server->recvBuffer);
 
         int receivedMsgId;
-        sscanf(server->recvBuffer, "%x %7s", &receivedMsgId, receivedCmd);
+        sscanf(server->recvBuffer, "%x %31s", &receivedMsgId, receivedCmd);
 
         if (strcmp(receivedCmd, "ack") == 0) {
             if (receivedMsgId == msgId) {
@@ -107,21 +146,22 @@ int server_sendMessage(Server *server, const struct sockaddr_in *address,
     return -1;
 }
 
-int server_recvMessage(Server *server, struct sockaddr_in *address, char *cmd,
-                       void *param, int *paramSize) {
+Message *server_recvMessage(Server *server) {
+    struct sockaddr_in address;
     int r = 0;
+    char cmd[32];
 
     for (int i = 0; i < 8; i++) {
         socklen_t addressSize = sizeof(struct sockaddr_in);
         r = recvfrom(server->fd, server->recvBuffer, BUFFER_SIZE, 0,
-                     (struct sockaddr *)address, &addressSize);
+                     (struct sockaddr *)&address, &addressSize);
         if (r < 0) {
             switch (errno) {
             case EAGAIN:
             case ETIMEDOUT:
                 continue;
             default:
-                return -1;
+                return NULL;
             }
         }
 
@@ -133,25 +173,23 @@ int server_recvMessage(Server *server, struct sockaddr_in *address, char *cmd,
         int headerlen = strlen(header) + 1;
 
         int msgId;
-        sscanf(header, "%x %7s", &msgId, cmd);
+        sscanf(header, "%x %31s", &msgId, cmd);
 
         if (strcmp(cmd, "ack") == 0) {
             continue;
         }
 
         int dataSize = r - headerlen;
-        if (dataSize < 0 || dataSize > *paramSize) return -1;
-        memcpy(param, header + headerlen, dataSize);
-        *paramSize = dataSize;
+        if (dataSize < 0) return NULL;
 
         int sendSize = sprintf(server->sendBuffer, "%08x ack", msgId) + 1;
         r = sendto(server->fd, server->sendBuffer, sendSize, 0,
-                   (struct sockaddr *)address, addressSize);
+                   (struct sockaddr *)&address, addressSize);
         DEBUG_PRINT("server_recvMessage: send(%s ...)\n", server->sendBuffer);
-        if (r < 0) return -1;
+        if (r < 0) return NULL;
 
-        return 0;
+        return message_new(&address, cmd, header + headerlen, dataSize);
     }
 
-    return -1;
+    return NULL;
 }

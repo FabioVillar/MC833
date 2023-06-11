@@ -66,7 +66,10 @@ static void insertProfile(Client *client) {
     printf("Sending to server...\n");
 
     // Send strings separated by null terminator
-    int r = client_sendMessage(client, "insert", params, size);
+    Message *message = message_new("insert", params, size);
+    int r = client_sendMessage(client, message);
+    message_free(message);
+
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -82,7 +85,11 @@ static void listByCourse(Client *client) {
     int size = stdinLine(graduation, sizeof(graduation)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listByCourse", graduation, size);
+
+    Message *message = message_new("listByCourse", graduation, size);
+    int r = client_sendMessage(client, message);
+    message_free(message);
+
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -98,7 +105,11 @@ static void listBySkill(Client *client) {
     int size = stdinLine(skill, sizeof(skill)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listBySkill", skill, size);
+
+    Message *message = message_new("listBySkill", skill, size);
+    int r = client_sendMessage(client, message);
+    message_free(message);
+
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -114,7 +125,11 @@ static void listByYear(Client *client) {
     int size = stdinLine(gradYear, sizeof(gradYear)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listByYear", gradYear, size);
+
+    Message *message = message_new("listByYear", gradYear, size);
+    int r = client_sendMessage(client, message);
+    message_free(message);
+
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -125,7 +140,11 @@ static void listByYear(Client *client) {
 
 static void listAll(Client *client) {
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listAll", NULL, 0);
+
+    Message *message = message_new("listAll", NULL, 0);
+    int r = client_sendMessage(client, message);
+    message_free(message);
+
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -141,7 +160,11 @@ static void listByEmail(Client *client) {
     int size = stdinLine(email, sizeof(email)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "listByEmail", email, size);
+
+    Message *message = message_new("listByEmail", email, size);
+    int r = client_sendMessage(client, message);
+    message_free(message);
+
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {
@@ -157,7 +180,11 @@ static void removeByEmail(Client *client) {
     int size = stdinLine(email, sizeof(email)) + 1;
 
     printf("Sending to server...\n");
-    int r = client_sendMessage(client, "removeByEmail", email, size);
+
+    Message *message = message_new("removeByEmail", email, size);
+    int r = client_sendMessage(client, message);
+    message_free(message);
+
     if (r < 0) {
         printf("Failure! Press Enter to continue.\n");
     } else {

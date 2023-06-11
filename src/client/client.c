@@ -1,3 +1,5 @@
+#define _GNU_SOURCE  // enables strdup
+
 #include "client.h"
 
 #include <arpa/inet.h>
@@ -24,6 +26,29 @@ struct Client {
     char sendBuffer[BUFFER_SIZE];
     char recvBuffer[BUFFER_SIZE];
 };
+
+Message *message_new(const char *cmd, const void *param, int paramSize) {
+    char *cmd2 = strdup(cmd);
+    void *param2 = malloc(paramSize);
+    if (!cmd2 || !param2) exit(-1);
+
+    memcpy(param2, param, paramSize);
+
+    Message *message = calloc(sizeof(Message), 1);
+    if (!message) exit(-1);
+
+    message->cmd = cmd2;
+    message->param = param2;
+    message->paramSize = paramSize;
+    
+    return message;
+}
+
+void message_free(Message *message) {
+    free(message->cmd);
+    free(message->param);
+    free(message);
+}
 
 Client *client_new(const char *ip, int port) {
     // assign IP, PORT
@@ -57,19 +82,18 @@ void client_free(Client *client) {
     free(client);
 }
 
-int client_sendMessage(Client *client, const char *cmd, const void *param,
-                       int paramSize) {
+int client_sendMessage(Client *client, const Message *message) {
     int r;
-    char receivedCmd[8];
+    char receivedCmd[32];
 
     int msgId = (client->nextMsgId++) & 0xFFFFFFFF;
 
-    r = sprintf(client->sendBuffer, "%08x %s", msgId, cmd);
+    r = sprintf(client->sendBuffer, "%08x %s", msgId, message->cmd);
 
-    int size = r + 1 + paramSize;
+    int size = r + 1 + message->paramSize;
     if (size > BUFFER_SIZE) return -1;
 
-    memcpy(&client->sendBuffer[r + 1], param, paramSize);
+    memcpy(&client->sendBuffer[r + 1], message->param, message->paramSize);
 
     for (;;) {
         DEBUG_PRINT("client_sendMessage: send(%s ...)\n", client->sendBuffer);
@@ -94,7 +118,7 @@ int client_sendMessage(Client *client, const char *cmd, const void *param,
         DEBUG_PRINT("client_sendMessage: recv(%s ...)\n", client->recvBuffer);
 
         int receivedMsgId;
-        sscanf(client->recvBuffer, "%x %7s", &receivedMsgId, receivedCmd);
+        sscanf(client->recvBuffer, "%x %31s", &receivedMsgId, receivedCmd);
 
         if (strcmp(receivedCmd, "ack") == 0) {
             if (receivedMsgId == msgId) {
@@ -104,8 +128,9 @@ int client_sendMessage(Client *client, const char *cmd, const void *param,
     }
 }
 
-int client_recvMessage(Client *client, char *cmd, void *param, int paramSize) {
+Message *client_recvMessage(Client *client) {
     int r;
+    char cmd[32];
 
     // Retry at most 8 times
     for (int i = 0; i < 8; i++) {
@@ -114,30 +139,32 @@ int client_recvMessage(Client *client, char *cmd, void *param, int paramSize) {
             if (errno == ETIMEDOUT) {
                 continue;
             } else {
-                return -1;
+                return NULL;
             }
         }
 
         // Not a string: ignore
         if (!memchr(client->recvBuffer, '\0', r)) continue;
 
+        const char *header = client->recvBuffer;
+        int headerlen = strlen(header) + 1;
+
         int msgId;
-        sscanf(client->recvBuffer, "%x %7s", &msgId, cmd);
+        sscanf(header, "%x %31s", &msgId, cmd);
 
         if (strcmp(cmd, "ack") == 0) {
             continue;
         }
 
-        int dataSize = r - 13;
-        if (dataSize > paramSize) return -1;
-        memcpy(param, &client->recvBuffer[13], dataSize);
+        int dataSize = r - headerlen;
+        if (dataSize < 0) return NULL;
 
         int sendSize = sprintf(client->sendBuffer, "%08x ack", msgId) + 1;
         r = send(client->fd, client->sendBuffer, sendSize, 0);
-        if (r < 0) return -1;
+        if (r < 0) return NULL;
 
-        return 0;
+        return message_new(cmd, header + headerlen, dataSize);
     }
 
-    return -1;
+    return NULL;
 }
