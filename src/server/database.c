@@ -48,7 +48,7 @@ static Row *row_fromString(Database *database, char *string) {
 static Row *row_new(Database *database) {
     // calloc initializes to 0
     Row *row = calloc(1, sizeof(Row));
-    if (!row) return NULL;
+    if (!row) exit(-1);
     return row;
 }
 
@@ -183,29 +183,30 @@ DatabaseResult database_addRow(Database *database, const char *email,
 
     pthread_mutex_lock(&database->mutex);
 
-    for (int i = 0; i < database->nRows; i++) {
+    int nRows = database->nRows;
+    for (int i = 0; i < nRows; i++) {
         if (strcmp(database->rows[i]->columns[COLUMN_EMAIL], email) == 0) {
             r = DB_ALREADY_EXISTS;
             break;
         }
     }
 
-    if (r == DB_OK && database->nRows >= DATABASE_MAX_ROWS) {
+    if (r == DB_OK && nRows >= DATABASE_MAX_ROWS) {
         r = DB_FULL;
     }
 
     if (r == DB_OK) {
         Row *row = row_new(database);
-        if (row) {
-            row->columns[COLUMN_EMAIL] = strdup(email);
-            row->columns[COLUMN_FIRST_NAME] = strdup(firstName);
-            row->columns[COLUMN_LAST_NAME] = strdup(lastName);
-            row->columns[COLUMN_CITY] = strdup(city);
-            row->columns[COLUMN_GRADUATION] = strdup(graduation);
-            row->columns[COLUMN_GRAD_YEAR] = strdup(gradYear);
-            row->columns[COLUMN_SKILLS] = strdup(skills);
-            database->rows[database->nRows++] = row;
-        }
+        row->columns[COLUMN_EMAIL] = strdup(email);
+        row->columns[COLUMN_FIRST_NAME] = strdup(firstName);
+        row->columns[COLUMN_LAST_NAME] = strdup(lastName);
+        row->columns[COLUMN_CITY] = strdup(city);
+        row->columns[COLUMN_GRADUATION] = strdup(graduation);
+        row->columns[COLUMN_GRAD_YEAR] = strdup(gradYear);
+        row->columns[COLUMN_SKILLS] = strdup(skills);
+        database->rows[nRows] = row;
+
+        database->nRows++;
     }
 
     pthread_mutex_unlock(&database->mutex);
@@ -213,14 +214,27 @@ DatabaseResult database_addRow(Database *database, const char *email,
     return r;
 }
 
-void database_deleteRow(Database *database, int index) {
+DatabaseResult database_deleteRow(Database *database, const char *email) {
+    DatabaseResult r = DB_OK;
+
     pthread_mutex_lock(&database->mutex);
 
-    row_free(database->rows[index]);
-    memmove(&database->rows[index], &database->rows[index + 1],
-            sizeof(Row) * (database->nRows - index - 1));
-    database->nRows -= 1;
-    database->rows[database->nRows] = NULL;
+    int nRows = database->nRows;
+    for (int i = 0; i < nRows; i++) {
+        if (strcmp(database->rows[i]->columns[COLUMN_EMAIL], email) == 0) {
+            row_free(database->rows[i]);
+            memmove(&database->rows[i], &database->rows[i + 1],
+                    sizeof(Row) * (database->nRows - i - 1));
+            database->nRows--;
+            database->rows[database->nRows] = NULL;
+
+            r = DB_DOES_NOT_EXIST;
+
+            break;
+        }
+    }
 
     pthread_mutex_unlock(&database->mutex);
+
+    return r;
 }

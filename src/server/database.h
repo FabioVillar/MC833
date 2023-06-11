@@ -20,6 +20,7 @@ typedef enum {
     DB_OK,
     DB_ALREADY_EXISTS,
     DB_FULL,
+    DB_DOES_NOT_EXIST,
 } DatabaseResult;
 
 typedef struct Database Database;
@@ -55,7 +56,7 @@ DatabaseResult database_addRow(Database *database, const char *email,
                                const char *city, const char *graduation,
                                const char *gradYear, const char *skills);
 
-/// Deleta uma linha
-void database_deleteRow(Database *database, int index);
+/// Deleta uma linha com certo e-mail
+DatabaseResult database_deleteRow(Database *database, const char *email);
 
 #endif

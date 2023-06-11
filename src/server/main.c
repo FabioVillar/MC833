@@ -30,7 +30,7 @@ static char *nextLine(const char **lineIterator) {
 
 /// Print a row as a profile
 static int printProfile(char *buffer, int bufferSize, Database *database,
-                        struct sockaddr_in *clientaddr, int row) {
+                        int row) {
     char *email = database_get(database, row, COLUMN_EMAIL);
     char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
     char *lastName = database_get(database, row, COLUMN_LAST_NAME);
@@ -84,7 +84,7 @@ static int printNameAndEmail(char *buffer, int bufferSize, Database *database,
 
 /// Print graduation field, name and email
 static int printCourseNameAndEmail(char *buffer, int bufferSize,
-                                    Database *database, int row) {
+                                   Database *database, int row) {
     char *email = database_get(database, row, COLUMN_EMAIL);
     char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
     char *lastName = database_get(database, row, COLUMN_LAST_NAME);
@@ -173,6 +173,107 @@ static void listByCourse(Server *server, Database *database,
     server_sendResponse_str(server, request, buf);
 }
 
+static void listBySkill(Server *server, Database *database,
+                        const Request *request) {
+    char buf[BUFFER_SIZE];
+
+    char *next = buf;
+    int remaining = BUFFER_SIZE;
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        char *skills = database_get(database, i, COLUMN_SKILLS);
+        if (strstr(skills, request->data)) {
+            int r = printNameAndEmail(next, remaining, database, i);
+            next += r;
+            remaining -= r;
+        }
+        free(skills);
+    }
+    printEndOfList(next, remaining);
+
+    server_sendResponse_str(server, request, buf);
+}
+
+static void listByYear(Server *server, Database *database,
+                       const Request *request) {
+    char buf[BUFFER_SIZE];
+
+    char *next = buf;
+    int remaining = BUFFER_SIZE;
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        char *gradYear = database_get(database, i, COLUMN_GRAD_YEAR);
+        if (strcmp(gradYear, request->data) == 0) {
+            int r = printNameAndEmail(next, remaining, database, i);
+            next += r;
+            remaining -= r;
+        }
+        free(gradYear);
+    }
+    printEndOfList(next, remaining);
+
+    server_sendResponse_str(server, request, buf);
+}
+
+static void listAll(Server *server, Database *database,
+                    const Request *request) {
+    char buf[BUFFER_SIZE];
+
+    char *next = buf;
+    int remaining = BUFFER_SIZE;
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        int r = printNameAndEmail(next, remaining, database, i);
+        next += r;
+        remaining -= r;
+    }
+    printEndOfList(next, remaining);
+
+    server_sendResponse_str(server, request, buf);
+}
+
+static void listByEmail(Server *server, Database *database,
+                        const Request *request) {
+    char buf[BUFFER_SIZE];
+
+    char *next = buf;
+    int remaining = BUFFER_SIZE;
+
+    int rows = database_countRows(database);
+    for (int i = 0; i < rows; i++) {
+        char *email = database_get(database, i, COLUMN_EMAIL);
+        if (strcmp(email, request->data) == 0) {
+            int r = printProfile(next, remaining, database, i);
+            next += r;
+            remaining -= r;
+        }
+        free(email);
+    }
+    printEndOfList(next, remaining);
+
+    server_sendResponse_str(server, request, buf);
+}
+
+static void removeByEmail(Server *server, Database *database,
+                          const Request *request) {
+    char buf[BUFFER_SIZE];
+
+    char *next = buf;
+    int remaining = BUFFER_SIZE;
+
+    switch (database_deleteRow(database, request->data)) {
+    case DB_OK:
+        server_sendResponse_str(server, request, "Success\n");
+        break;
+    default:
+        server_sendResponse_str(server, request, "Failed\n");
+        break;
+    }
+}
+
 static void runServer(Server *server, Database *database) {
     for (;;) {
         Request *request = server_recvRequest(server);
@@ -194,10 +295,15 @@ static void runServer(Server *server, Database *database) {
         } else if (strcmp(cmd, "listByCourse") == 0) {
             listByCourse(server, database, request);
         } else if (strcmp(cmd, "listBySkill") == 0) {
+            listBySkill(server, database, request);
         } else if (strcmp(cmd, "listByYear") == 0) {
+            listByYear(server, database, request);
         } else if (strcmp(cmd, "listAll") == 0) {
+            listAll(server, database, request);
         } else if (strcmp(cmd, "listByEmail") == 0) {
+            listByEmail(server, database, request);
         } else if (strcmp(cmd, "removeByEmail") == 0) {
+            removeByEmail(server, database, request);
         } else {
             printf("Received unknown message\n");
         }
