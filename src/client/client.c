@@ -1,128 +1,269 @@
-#define _GNU_SOURCE  // enables strdup
-
 #include "client.h"
 
-#include <arpa/inet.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
 
-#define BUFFER_SIZE 32000
-#define DEBUG
-
-#ifdef DEBUG
-#define DEBUG_PRINT(...) printf(__VA_ARGS__)
-#else
-#define DEBUG_PRINT(...)
-#endif
+#include "client_socket.h"
 
 struct Client {
-    int fd;
-    int nextMsgId;
-    char sendBuffer[BUFFER_SIZE];
-    char recvBuffer[BUFFER_SIZE];
+    ClientSocket *socket;
 };
 
-struct Response {
-    int dataSize;
-    char data[];
-};
+/// Ask user to press enter to continue.
+static void waitForEnter() {
+    for (;;) {
+        char c = getchar();
 
-void response_free(Response *response) { free(response); }
+        if (c == '\n' || c == EOF) {
+            return;
+        }
+    }
+}
 
-const char *response_getString(Response *response) {
-    if (response->data[response->dataSize - 1] == '\0') {
-        return response->data;
-    } else {
-        return "INVALID\n";
+/// Read user input until newline.
+static int stdinLine(char *buf, int size) {
+    int i = 0;
+
+    printf("> ");
+    for (;;) {
+        char c = getchar();
+
+        if (c == '\n' || c == EOF) {
+            buf[i] = '\0';
+            return i;
+        }
+
+        if (i < size - 1) {
+            buf[i] = c;
+            i++;
+        }
     }
 }
 
 Client *client_new(const char *ip, int port) {
-    // assign IP, PORT
-    struct sockaddr_in servaddr = {};
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = inet_addr(ip);
-    servaddr.sin_port = htons(port);
-
-    // socket create and verification
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd == -1) exit(-1);
-    if (connect(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
-        exit(-1);
-    }
-
-    struct timeval tv;
-    tv.tv_sec = 30;
-    tv.tv_usec = 0;
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    Client *client = calloc(1, sizeof(Client));
+    Client *client = calloc(sizeof(Client), 1);
     if (!client) exit(-1);
-
-    client->fd = fd;
-
+    client->socket = clientsocket_new(ip, port);
     return client;
 }
 
 void client_free(Client *client) {
-    close(client->fd);
+    clientsocket_free(client->socket);
     free(client);
 }
 
-Response *client_sendRequest(Client *client, const char *cmd,
-                             const char *data) {
-    int msgId = (client->nextMsgId++) & 0xFFFFFFFF;
-
-    int requestHeaderSize =
-        sprintf(client->sendBuffer, "%08x %s", msgId, cmd) + 1;
-    if (requestHeaderSize > BUFFER_SIZE) return NULL;
-
-    int size = requestHeaderSize;
-    if (data) {
-        strncpy(&client->sendBuffer[requestHeaderSize], data,
-                BUFFER_SIZE - requestHeaderSize);
-        size += strlen(data) + 1;
-    }
+void client_run(Client *client) {
+    char buf[8];
 
     for (;;) {
-        DEBUG_PRINT("client_sendMessage: send(%s ...)\n", client->sendBuffer);
-        int r = send(client->fd, client->sendBuffer, size, 0);
-        if (r < 0) return NULL;
+        // Show the menu
+        printf(
+            "\nMENU\n"
+            "Write a number accordingly to what you want:\n"
+            "1 - Insert a new profile in the system\n"
+            "2 - List all people graduated in a specific course\n"
+            "3 - List all people with a given skill\n"
+            "4 - List all people graduated in a specific year\n"
+            "5 - List all informations of all profiles\n"
+            "6 - Given an email, list all information of it\n"
+            "7 - Given an email, remove a profile\n"
+            "8 - Exit\n");
 
-        r = recv(client->fd, client->recvBuffer, BUFFER_SIZE, 0);
-        if (r < 0) {
-            DEBUG_PRINT("client_sendMessage: %s\n", strerror(errno));
-            if (errno == ETIMEDOUT) {
-                continue;
-            } else {
-                return NULL;
-            }
-        }
-
-        // Not a string: ignore
-        if (!memchr(client->recvBuffer, '\0', r)) {
-            DEBUG_PRINT("client_sendMessage: recv not a string\n");
+        int size = stdinLine(buf, sizeof(buf));
+        int error = 0;
+        if (size == 0) {
             continue;
+        } else if (size == 1) {
+            switch (buf[0]) {
+            case '1':
+                client_insertProfile(client);
+                break;
+            case '2':
+                client_listByCourse(client);
+                break;
+            case '3':
+                client_listBySkill(client);
+                break;
+            case '4':
+                client_listByYear(client);
+                break;
+            case '5':
+                client_listAll(client);
+                break;
+            case '6':
+                client_listByEmail(client);
+                break;
+            case '7':
+                client_removeByEmail(client);
+                break;
+            case '8':
+                return;
+            default:
+                error = 1;
+                break;
+            }
+        } else {
+            error = 1;
         }
-        DEBUG_PRINT("client_sendMessage: recv(%s ...)\n", client->recvBuffer);
 
-        int receivedMsgId;
-        sscanf(client->recvBuffer, "%x", &receivedMsgId);
-
-        int responseHeaderSize = strlen(client->recvBuffer) + 1;
-        int dataSize = r - responseHeaderSize;
-
-        Response *response = malloc(sizeof(Response) + dataSize);
-        if (!response) exit(-1);
-
-        response->dataSize = dataSize;
-        memcpy(response->data, &client->recvBuffer[responseHeaderSize],
-               dataSize);
-        return response;
+        if (error) {
+            printf("Invalid input. Press Enter to continue.\n");
+            waitForEnter();
+        }
     }
+}
+
+void client_insertProfile(Client *client) {
+    char email[128];
+    printf("Insert email\n");
+    stdinLine(email, sizeof(email));
+
+    char firstName[64];
+    printf("Insert first name\n");
+    stdinLine(firstName, sizeof(firstName));
+
+    char lastName[64];
+    printf("Insert last name\n");
+    stdinLine(lastName, sizeof(lastName));
+
+    char city[64];
+    printf("Insert city\n");
+    stdinLine(city, sizeof(city));
+
+    char graduation[64];
+    printf("Insert graduation course\n");
+    stdinLine(graduation, sizeof(graduation));
+
+    char gradYear[64];
+    printf("Insert graduation year\n");
+    stdinLine(gradYear, sizeof(gradYear));
+
+    char skills[128];
+    printf("Insert skills (Ex.: Skill1,Skill2,Skill3,etc)\n");
+    stdinLine(skills, sizeof(skills));
+
+    char params[1024];
+    snprintf(params, sizeof(params), "%s\n%s\n%s\n%s\n%s\n%s\n%s", email,
+             firstName, lastName, city, graduation, gradYear, skills);
+
+    Response *response =
+        clientsocket_sendRequest(client->socket, "insert", params);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_listByCourse(Client *client) {
+    char graduation[64];
+
+    printf("Insert graduation course\n");
+    stdinLine(graduation, sizeof(graduation));
+
+    Response *response =
+        clientsocket_sendRequest(client->socket, "listByCourse", graduation);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_listBySkill(Client *client) {
+    char skill[128];
+
+    printf("Insert skill\n");
+    stdinLine(skill, sizeof(skill));
+
+    Response *response =
+        clientsocket_sendRequest(client->socket, "listBySkill", skill);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_listByYear(Client *client) {
+    char gradYear[64];
+
+    printf("Insert graduation year\n");
+    stdinLine(gradYear, sizeof(gradYear));
+
+    Response *response =
+        clientsocket_sendRequest(client->socket, "listByYear", gradYear);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_listAll(Client *client) {
+    Response *response =
+        clientsocket_sendRequest(client->socket, "listAll", NULL);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_listByEmail(Client *client) {
+    char email[128];
+
+    printf("Insert email\n");
+    stdinLine(email, sizeof(email));
+
+    Response *response =
+        clientsocket_sendRequest(client->socket, "listByEmail", email);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_removeByEmail(Client *client) {
+    char email[128];
+
+    printf("Insert email\n");
+    stdinLine(email, sizeof(email));
+
+    Response *response =
+        clientsocket_sendRequest(client->socket, "removeByEmail", email);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
 }

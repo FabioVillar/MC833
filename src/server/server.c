@@ -1,127 +1,368 @@
-#define _GNU_SOURCE  // enables strdup
-
 #include "server.h"
 
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
-#include <sys/time.h>
-#include <unistd.h>
+
+#include "database.h"
 
 #define BUFFER_SIZE 32000
-#define DEBUG
-
-#ifdef DEBUG
-#define DEBUG_PRINT(...) printf(__VA_ARGS__)
-#else
-#define DEBUG_PRINT(...)
-#endif
 
 struct Server {
-    int fd;
+    ServerSocket *socket;
+    Database *database;
     char buffer[BUFFER_SIZE];
+    int filledBuffer;
 };
 
-void request_free(Request *request) {
-    free(request->cmd);
-    free(request->data);
-    free(request);
+/// Iterate over the lines of a string
+static char *nextLine(const char **lineIterator) {
+    const char *line = *lineIterator;
+
+    if (!line) return NULL;
+
+    char *newLine = strchr(line, '\n');
+    if (newLine) {
+        *lineIterator = newLine + 1;
+        return strndup(line, newLine - line);
+    } else {
+        *lineIterator = NULL;
+        return strdup(line);
+    }
 }
 
-Server *server_new(int port) {
-    // assign IP, PORT
-    struct sockaddr_in servaddr = {};
-    servaddr.sin_family = AF_INET;
-    servaddr.sin_addr.s_addr = 0;
-    servaddr.sin_port = htons(port);
-
-    // socket create and verification
-    int fd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (fd == -1) exit(-1);
-    if (bind(fd, (struct sockaddr *)&servaddr, sizeof(servaddr)) != 0) {
-        printf("Bind failed.\n");
-        exit(-1);
-    }
-
-    struct timeval tv;
-    tv.tv_sec = 1;  // Timeout is less than client timeout
-    tv.tv_usec = 0;
-    setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
-
-    Server *server = calloc(1, sizeof(Server));
+Server *server_new(int port, const char *directory) {
+    Server *server = calloc(sizeof(Server), 1);
     if (!server) exit(-1);
-
-    server->fd = fd;
-
+    server->socket = serversocket_new(port);
+    server->database = database_new(directory);
     return server;
 }
 
 void server_free(Server *server) {
-    close(server->fd);
+    serversocket_free(server->socket);
+    database_free(server->database);
     free(server);
 }
 
-Request *server_recvRequest(Server *server) {
-    struct sockaddr_in address;
-
+void server_run(Server *server) {
+    database_load(server->database);
     for (;;) {
-        socklen_t addressSize = sizeof(struct sockaddr_in);
-        int r = recvfrom(server->fd, server->buffer, BUFFER_SIZE, 0,
-                         (struct sockaddr *)&address, &addressSize);
-        if (r < 0) {
+        Request *request = serversocket_recvRequest(server->socket);
+        if (!request) {
             switch (errno) {
             case EAGAIN:
             case ETIMEDOUT:
                 continue;
             default:
                 printf("%s\n", strerror(errno));
-                return NULL;
+                return;
             }
         }
 
-        // Not a string: ignore
-        if (!memchr(server->buffer, '\0', r)) continue;
-        DEBUG_PRINT("server_recvMessage: recv(%s ...)\n", server->buffer);
+        const char *cmd = request_getCmd(request);
 
-        const char *header = server->buffer;
-        int headerlen = strlen(header) + 1;
+        if (strcmp(cmd, "insert") == 0) {
+            server_insertProfile(server, request);
+        } else if (strcmp(cmd, "listByCourse") == 0) {
+            server_listByCourse(server, request);
+        } else if (strcmp(cmd, "listBySkill") == 0) {
+            server_listBySkill(server, request);
+        } else if (strcmp(cmd, "listByYear") == 0) {
+            server_listByYear(server, request);
+        } else if (strcmp(cmd, "listAll") == 0) {
+            server_listAll(server, request);
+        } else if (strcmp(cmd, "listByEmail") == 0) {
+            server_listByEmail(server, request);
+        } else if (strcmp(cmd, "removeByEmail") == 0) {
+            server_removeByEmail(server, request);
+        } else {
+            printf("Received unknown message\n");
+        }
 
-        const char *data = header + headerlen;
-        // Not a string: ignore
-        if (!memchr(data, '\0', r - headerlen)) continue;
-
-        int msgId;
-        char cmd[32];
-        sscanf(header, "%x %31s", &msgId, cmd);
-
-        Request *request = calloc(sizeof(Request), 1);
-        if (!request) exit(-1);
-        memcpy(&request->address, &address, sizeof(struct sockaddr_in));
-        request->msgId = msgId;
-        request->cmd = strdup(cmd);
-        if (!request->cmd) exit(-1);
-        request->data = strdup(data);
-        if (!request->data) exit(-1);
-        return request;
+        request_free(request);
     }
 }
 
-int server_sendResponse(Server *server, const Request *request,
-                        const void *data, int dataSize) {
-    int headerlen = sprintf(server->buffer, "%08x", request->msgId) + 1;
-    if (headerlen + dataSize > BUFFER_SIZE) return -1;
+void server_insertProfile(Server *server, const Request *request) {
+    const char *iterator = request_getString(request);
+    char *email = nextLine(&iterator);
+    char *firstName = nextLine(&iterator);
+    char *lastName = nextLine(&iterator);
+    char *city = nextLine(&iterator);
+    char *graduation = nextLine(&iterator);
+    char *gradYear = nextLine(&iterator);
+    char *skills = nextLine(&iterator);
 
-    memcpy(&server->buffer[headerlen], data, dataSize);
+    if (email && firstName && lastName && city && graduation && gradYear &&
+        skills) {
+        switch (database_addRow(server->database, email, firstName, lastName,
+                                city, graduation, gradYear, skills)) {
+        case DB_OK:
+            database_save(server->database);
+            serversocket_sendResponse_str(server->socket, request, "Success\n");
+            break;
+        case DB_FULL:
+            serversocket_sendResponse_str(server->socket, request,
+                                          "Database is full\n");
+            break;
+        case DB_ALREADY_EXISTS:
+            serversocket_sendResponse_str(server->socket, request,
+                                          "E-mail is already registered\n");
+            break;
+        default:
+            serversocket_sendResponse_str(server->socket, request, "Failed\n");
+            break;
+        }
+    }
 
-    DEBUG_PRINT("server_sendResponse: send(%s ...)\n", server->buffer);
-    return sendto(server->fd, server->buffer, headerlen + dataSize, 0,
-                  (const struct sockaddr *)&request->address,
-                  sizeof(struct sockaddr_in));
+    free(email);
+    free(firstName);
+    free(lastName);
+    free(city);
+    free(graduation);
+    free(gradYear);
+    free(skills);
 }
 
-int server_sendResponse_str(Server *server, const Request *request,
-                        const char *data) {
-    return server_sendResponse(server, request, data, strlen(data) + 1);
+void server_listByCourse(Server *server, const Request *request) {
+    const char *data = request_getString(request);
+    if (!data) return;
+
+    server_clearBuffer(server);
+    int rows = database_countRows(server->database);
+    for (int i = 0; i < rows; i++) {
+        char *skills = database_get(server->database, i, COLUMN_SKILLS);
+        if (strstr(skills, data)) {
+            server_addNameAndEmailToBuffer(server, i);
+        }
+        free(skills);
+    }
+    server_addEndOfListToBuffer(server);
+
+    serversocket_sendResponse_str(server->socket, request, server->buffer);
+}
+
+void server_listBySkill(Server *server, const Request *request) {
+    const char *data = request_getString(request);
+    if (!data) return;
+
+    server_clearBuffer(server);
+    int rows = database_countRows(server->database);
+    for (int i = 0; i < rows; i++) {
+        char *skills = database_get(server->database, i, COLUMN_SKILLS);
+        if (strstr(skills, data)) {
+            server_addNameAndEmailToBuffer(server, i);
+        }
+        free(skills);
+    }
+    server_addEndOfListToBuffer(server);
+
+    serversocket_sendResponse_str(server->socket, request, server->buffer);
+}
+
+void server_listByYear(Server *server, const Request *request) {
+    const char *data = request_getString(request);
+    if (!data) return;
+
+    server_clearBuffer(server);
+    int rows = database_countRows(server->database);
+    for (int i = 0; i < rows; i++) {
+        char *gradYear = database_get(server->database, i, COLUMN_GRAD_YEAR);
+        if (strcmp(gradYear, data) == 0) {
+            server_addNameAndEmailToBuffer(server, i);
+        }
+        free(gradYear);
+    }
+    server_addEndOfListToBuffer(server);
+
+    serversocket_sendResponse_str(server->socket, request, server->buffer);
+}
+
+void server_listAll(Server *server, const Request *request) {
+    server_clearBuffer(server);
+    int rows = database_countRows(server->database);
+    for (int i = 0; i < rows; i++) {
+        server_addNameAndEmailToBuffer(server, i);
+    }
+    server_addEndOfListToBuffer(server);
+
+    serversocket_sendResponse_str(server->socket, request, server->buffer);
+}
+
+void server_listByEmail(Server *server, const Request *request) {
+    const char *data = request_getString(request);
+    if (!data) return;
+
+    server_clearBuffer(server);
+    int rows = database_countRows(server->database);
+    for (int i = 0; i < rows; i++) {
+        char *email = database_get(server->database, i, COLUMN_EMAIL);
+        if (strcmp(email, data) == 0) {
+            server_addNameAndEmailToBuffer(server, i);
+        }
+        free(email);
+    }
+    server_addEndOfListToBuffer(server);
+
+    serversocket_sendResponse_str(server->socket, request, server->buffer);
+}
+
+void server_removeByEmail(Server *server, const Request *request) {
+    const char *data = request_getString(request);
+    if (!data) return;
+
+    switch (database_deleteRow(server->database, data)) {
+    case DB_OK:
+        serversocket_sendResponse_str(server->socket, request, "Success\n");
+        break;
+    case DB_EMAIL_DOES_NOT_EXIST:
+        serversocket_sendResponse_str(server->socket, request,
+                                      "E-mail is not registered\n");
+        break;
+    default:
+        serversocket_sendResponse_str(server->socket, request, "Failed\n");
+        break;
+    }
+
+    database_save(server->database);
+}
+
+void server_uploadImage(Server *server, const Request *request) {
+    const void *data;
+    int dataSize;
+
+    request_getData(request, &data, &dataSize);
+
+    const void *nulTerminator = memchr(data, '\0', dataSize);
+    if (!nulTerminator) return;
+
+    const char *email = (const char *)data;
+    const void *image = nulTerminator + 1;
+    int imageSize = dataSize - (image - data);
+
+    switch (database_setImage(server->database, email, image, imageSize)) {
+    case DB_OK:
+        serversocket_sendResponse_str(server->socket, request, "Success\n");
+        break;
+    case DB_EMAIL_DOES_NOT_EXIST:
+        serversocket_sendResponse_str(server->socket, request,
+                                      "E-mail is not registered\n");
+        break;
+    default:
+        serversocket_sendResponse_str(server->socket, request, "Failed\n");
+        break;
+    }
+}
+
+void server_downloadImage(Server *server, const Request *request) {
+    static const char success[] = "Success\n";
+
+    const char *data = request_getString(request);
+    if (!data) return;
+
+    strcpy(server->buffer, success);
+    server->filledBuffer = sizeof(success);
+
+    int imageSize = BUFFER_SIZE - server->filledBuffer;
+
+    switch (database_getImage(server->database, data,
+                              &server->buffer[server->filledBuffer],
+                              &imageSize)) {
+    case DB_OK:
+        serversocket_sendResponse(server->socket, request, server->buffer,
+                                  server->filledBuffer + imageSize);
+        break;
+    case DB_IMAGE_DOES_NOT_EXIST:
+        serversocket_sendResponse_str(server->socket, request,
+                                      "Image is not registered\n");
+        break;
+    case DB_EMAIL_DOES_NOT_EXIST:
+        serversocket_sendResponse_str(server->socket, request,
+                                      "E-mail is not registered\n");
+        break;
+    default:
+        serversocket_sendResponse_str(server->socket, request, "Failed\n");
+        break;
+    }
+}
+
+void server_clearBuffer(Server *server) { server->filledBuffer = 0; }
+
+void server_addProfileToBuffer(Server *server, int row) {
+    Database *database = server->database;
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+    char *city = database_get(database, row, COLUMN_CITY);
+    char *graduation = database_get(database, row, COLUMN_GRADUATION);
+    char *gradYear = database_get(database, row, COLUMN_GRAD_YEAR);
+    char *skills = database_get(database, row, COLUMN_SKILLS);
+
+    server->filledBuffer += snprintf(&server->buffer[server->filledBuffer],
+                                     BUFFER_SIZE - server->filledBuffer,
+                                     "------------------------\n"
+                                     "Email: %s\n"
+                                     "First Name: %s\n"
+                                     "Last Name: %s\n"
+                                     "City: %s\n"
+                                     "Graduation Field: %s\n"
+                                     "Graduation Year: %s\n"
+                                     "Skills: %s\n",
+                                     email, firstName, lastName, city,
+                                     graduation, gradYear, skills);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+    free(city);
+    free(graduation);
+    free(gradYear);
+    free(skills);
+}
+
+void server_addNameAndEmailToBuffer(Server *server, int row) {
+    Database *database = server->database;
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+
+    server->filledBuffer += snprintf(&server->buffer[server->filledBuffer],
+                                     BUFFER_SIZE - server->filledBuffer,
+                                     "------------------------\n"
+                                     "Email: %s\n"
+                                     "Name: %s %s\n",
+                                     email, firstName, lastName);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+}
+
+void server_addCourseNameAndEmailToBuffer(Server *server, int row) {
+    Database *database = server->database;
+    char *email = database_get(database, row, COLUMN_EMAIL);
+    char *firstName = database_get(database, row, COLUMN_FIRST_NAME);
+    char *lastName = database_get(database, row, COLUMN_LAST_NAME);
+    char *graduation = database_get(database, row, COLUMN_GRADUATION);
+
+    server->filledBuffer += snprintf(&server->buffer[server->filledBuffer],
+                                     BUFFER_SIZE - server->filledBuffer,
+                                     "------------------------\n"
+                                     "Email: %s\n"
+                                     "Name: %s %s\n"
+                                     "Graduation Field: %s\n",
+                                     email, firstName, lastName, graduation);
+
+    free(email);
+    free(firstName);
+    free(lastName);
+    free(graduation);
+}
+
+void server_addEndOfListToBuffer(Server *server) {
+    server->filledBuffer += snprintf(&server->buffer[server->filledBuffer],
+                                     BUFFER_SIZE - server->filledBuffer,
+                                     "------ END OF LIST -----\n");
 }

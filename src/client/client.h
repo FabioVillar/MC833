@@ -3,19 +3,31 @@
 
 typedef struct Client Client;
 
-typedef struct Response Response;
-
-void response_free(Response *response);
-
-/// Get the string from the response.
-const char *response_getString(Response *response);
-
 Client *client_new(const char *ip, int port);
 
 void client_free(Client *client);
 
-/// Sends a request and waits for response.
-/// Error: returns null
-Response *client_sendRequest(Client *client, const char *cmd, const char *data);
+void client_run(Client *client);
+
+/// Insert a profile.
+void client_insertProfile(Client *client);
+
+/// List by course.
+void client_listByCourse(Client *client);
+
+/// List by course.
+void client_listBySkill(Client *client);
+
+/// List by skill.
+void client_listByYear(Client *client);
+
+/// List all.
+void client_listAll(Client *client);
+
+/// List by email.
+void client_listByEmail(Client *client);
+
+/// Remove by email.
+void client_removeByEmail(Client *client);
 
 #endif
