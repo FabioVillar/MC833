@@ -30,4 +30,8 @@ void client_listByEmail(Client *client);
 /// Remove by email.
 void client_removeByEmail(Client *client);
 
+void client_uploadImage(Client *client);
+
+void client_downloadImage(Client *client);
+
 #endif

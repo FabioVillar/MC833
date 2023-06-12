@@ -2,11 +2,17 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/errno.h>
 
 #include "client_socket.h"
 
+#define BUFFER_SIZE 64000
+#define MAX_IMAGE_SIZE 32000
+
 struct Client {
     ClientSocket *socket;
+    char buffer[BUFFER_SIZE];
 };
 
 /// Ask user to press enter to continue.
@@ -67,7 +73,9 @@ void client_run(Client *client) {
             "5 - List all informations of all profiles\n"
             "6 - Given an email, list all information of it\n"
             "7 - Given an email, remove a profile\n"
-            "8 - Exit\n");
+            "8 - Upload the image for a profile\n"
+            "9 - Download the image for a profile\n"
+            "0 - Exit\n");
 
         int size = stdinLine(buf, sizeof(buf));
         int error = 0;
@@ -97,6 +105,12 @@ void client_run(Client *client) {
                 client_removeByEmail(client);
                 break;
             case '8':
+                client_uploadImage(client);
+                break;
+            case '9':
+                client_downloadImage(client);
+                break;
+            case '0':
                 return;
             default:
                 error = 1;
@@ -142,12 +156,11 @@ void client_insertProfile(Client *client) {
     printf("Insert skills (Ex.: Skill1,Skill2,Skill3,etc)\n");
     stdinLine(skills, sizeof(skills));
 
-    char params[1024];
-    snprintf(params, sizeof(params), "%s\n%s\n%s\n%s\n%s\n%s\n%s", email,
+    snprintf(client->buffer, BUFFER_SIZE, "%s\n%s\n%s\n%s\n%s\n%s\n%s", email,
              firstName, lastName, city, graduation, gradYear, skills);
 
     Response *response =
-        clientsocket_sendRequest(client->socket, "insert", params);
+        clientsocket_sendRequest_str(client->socket, "insert", client->buffer);
     if (response) {
         printf("%s", response_getString(response));
         response_free(response);
@@ -160,13 +173,11 @@ void client_insertProfile(Client *client) {
 }
 
 void client_listByCourse(Client *client) {
-    char graduation[64];
-
     printf("Insert graduation course\n");
-    stdinLine(graduation, sizeof(graduation));
+    stdinLine(client->buffer, BUFFER_SIZE);
 
-    Response *response =
-        clientsocket_sendRequest(client->socket, "listByCourse", graduation);
+    Response *response = clientsocket_sendRequest_str(
+        client->socket, "listByCourse", client->buffer);
     if (response) {
         printf("%s", response_getString(response));
         response_free(response);
@@ -179,13 +190,11 @@ void client_listByCourse(Client *client) {
 }
 
 void client_listBySkill(Client *client) {
-    char skill[128];
-
     printf("Insert skill\n");
-    stdinLine(skill, sizeof(skill));
+    stdinLine(client->buffer, BUFFER_SIZE);
 
-    Response *response =
-        clientsocket_sendRequest(client->socket, "listBySkill", skill);
+    Response *response = clientsocket_sendRequest_str(
+        client->socket, "listBySkill", client->buffer);
     if (response) {
         printf("%s", response_getString(response));
         response_free(response);
@@ -198,13 +207,11 @@ void client_listBySkill(Client *client) {
 }
 
 void client_listByYear(Client *client) {
-    char gradYear[64];
-
     printf("Insert graduation year\n");
-    stdinLine(gradYear, sizeof(gradYear));
+    stdinLine(client->buffer, BUFFER_SIZE);
 
-    Response *response =
-        clientsocket_sendRequest(client->socket, "listByYear", gradYear);
+    Response *response = clientsocket_sendRequest_str(
+        client->socket, "listByYear", client->buffer);
     if (response) {
         printf("%s", response_getString(response));
         response_free(response);
@@ -218,7 +225,7 @@ void client_listByYear(Client *client) {
 
 void client_listAll(Client *client) {
     Response *response =
-        clientsocket_sendRequest(client->socket, "listAll", NULL);
+        clientsocket_sendRequest_str(client->socket, "listAll", NULL);
     if (response) {
         printf("%s", response_getString(response));
         response_free(response);
@@ -231,13 +238,11 @@ void client_listAll(Client *client) {
 }
 
 void client_listByEmail(Client *client) {
-    char email[128];
-
     printf("Insert email\n");
-    stdinLine(email, sizeof(email));
+    stdinLine(client->buffer, BUFFER_SIZE);
 
-    Response *response =
-        clientsocket_sendRequest(client->socket, "listByEmail", email);
+    Response *response = clientsocket_sendRequest_str(
+        client->socket, "listByEmail", client->buffer);
     if (response) {
         printf("%s", response_getString(response));
         response_free(response);
@@ -250,15 +255,99 @@ void client_listByEmail(Client *client) {
 }
 
 void client_removeByEmail(Client *client) {
-    char email[128];
+    printf("Insert email\n");
+    stdinLine(client->buffer, BUFFER_SIZE);
 
+    Response *response = clientsocket_sendRequest_str(
+        client->socket, "removeByEmail", client->buffer);
+    if (response) {
+        printf("%s", response_getString(response));
+        response_free(response);
+    } else {
+        printf("Response timed out\n");
+    }
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_uploadImage(Client *client) {
+    char email[128];
     printf("Insert email\n");
     stdinLine(email, sizeof(email));
 
-    Response *response =
-        clientsocket_sendRequest(client->socket, "removeByEmail", email);
+    char path[1024];
+    printf("Insert the path for the image on your computer\n");
+    stdinLine(path, sizeof(path));
+
+    FILE *f = fopen(path, "rb");
+    if (!f) {
+        printf("%s\n", strerror(errno));
+        return;
+    }
+
+    fseek(f, 0L, SEEK_END);
+    int fileSize = ftell(f);
+    fseek(f, 0L, SEEK_SET);
+
+    if (fileSize > MAX_IMAGE_SIZE) {
+        printf("Maximum image size is %d B\n", MAX_IMAGE_SIZE);
+    } else {
+        int emailSize = strlen(email);
+        strcpy(client->buffer, email);
+        fread(&client->buffer[emailSize + 1], fileSize, 1, f);
+
+        Response *response =
+            clientsocket_sendRequest(client->socket, "uploadImage",
+                                     client->buffer, emailSize + 1 + fileSize);
+        if (response) {
+            printf("%s", response_getString(response));
+            response_free(response);
+        } else {
+            printf("Response timed out\n");
+        }
+    }
+
+    fclose(f);
+
+    printf("Press enter to continue.");
+    waitForEnter();
+}
+
+void client_downloadImage(Client *client) {
+    printf("Insert email\n");
+    stdinLine(client->buffer, BUFFER_SIZE);
+
+    char path[1024];
+    printf("Insert the path for the image on your computer\n");
+    stdinLine(path, sizeof(path));
+
+    Response *response = clientsocket_sendRequest_str(
+        client->socket, "downloadImage", client->buffer);
     if (response) {
-        printf("%s", response_getString(response));
+        const void *data;
+        int size;
+
+        response_getData(response, &data, &size);
+
+        // Check if is a string
+        if (memchr(data, '\0', size)) {
+            const char *string = (const char *)data;
+            int stringSize = strlen(string);
+
+            const void *image = data + (stringSize + 1);
+            int imageSize = size - (stringSize + 1);
+
+            printf("%s", string);
+            if (imageSize != 0) {
+                FILE *f = fopen(path, "wb");
+                if (f) {
+                    fwrite(image, imageSize, 1, f);
+                    fclose(f);
+                }
+            }
+        }
+
         response_free(response);
     } else {
         printf("Response timed out\n");

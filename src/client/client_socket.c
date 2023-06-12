@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 32000
+#define BUFFER_SIZE 64000
 // #define DEBUG
 
 #ifdef DEBUG
@@ -40,6 +40,11 @@ const char *response_getString(Response *response) {
     } else {
         return NULL;
     }
+}
+
+void response_getData(const Response *response, const void **bytes, int *size) {
+    *bytes = response->data;
+    *size = response->dataSize;
 }
 
 ClientSocket *clientsocket_new(const char *ip, int port) {
@@ -75,23 +80,26 @@ void clientsocket_free(ClientSocket *client) {
 }
 
 Response *clientsocket_sendRequest(ClientSocket *client, const char *cmd,
-                             const char *data) {
+                                   const void *data, int size) {
     int msgId = (client->nextMsgId++) & 0xFFFFFFFF;
 
     int requestHeaderSize =
         sprintf(client->sendBuffer, "%08x %s", msgId, cmd) + 1;
     if (requestHeaderSize > BUFFER_SIZE) return NULL;
 
-    int size = requestHeaderSize;
-    if (data) {
-        strncpy(&client->sendBuffer[requestHeaderSize], data,
-                BUFFER_SIZE - requestHeaderSize);
-        size += strlen(data) + 1;
+    int totalSize = requestHeaderSize;
+    if (data && size != 0) {
+        if (requestHeaderSize + size > BUFFER_SIZE) {
+            return NULL;
+        }
+
+        memcpy(&client->sendBuffer[requestHeaderSize], data, size);
+        totalSize += size;
     }
 
     for (;;) {
         DEBUG_PRINT("client_sendMessage: send(%s ...)\n", client->sendBuffer);
-        int r = send(client->fd, client->sendBuffer, size, 0);
+        int r = send(client->fd, client->sendBuffer, totalSize, 0);
         if (r < 0) return NULL;
 
         r = recv(client->fd, client->recvBuffer, BUFFER_SIZE, 0);
@@ -125,4 +133,9 @@ Response *clientsocket_sendRequest(ClientSocket *client, const char *cmd,
                dataSize);
         return response;
     }
+}
+
+Response *clientsocket_sendRequest_str(ClientSocket *client, const char *cmd,
+                                       const char *x) {
+    return clientsocket_sendRequest(client, cmd, x, strlen(x) + 1);
 }

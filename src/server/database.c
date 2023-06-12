@@ -270,6 +270,12 @@ DatabaseResult database_deleteRow(Database *database, const char *email) {
         }
     }
 
+    if (r == DB_OK) {
+        char *imagePath = getImagePath(database, email);
+        remove(imagePath);
+        free(imagePath);
+    }
+
     pthread_mutex_unlock(&database->mutex);
 
     return r;
@@ -327,7 +333,7 @@ DatabaseResult database_getImage(Database *database, const char *email,
         free(imagePath);
 
         if (f) {
-            *size = fread(data, *size, 1, f);
+            *size = fread(data, 1, *size, f);
             fclose(f);
         } else {
             *size = 0;

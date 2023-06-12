@@ -11,7 +11,7 @@
 #include <sys/time.h>
 #include <unistd.h>
 
-#define BUFFER_SIZE 32000
+#define BUFFER_SIZE 64000
 #define CMD_MAX 32
 #define DEBUG
 

@@ -7,7 +7,7 @@
 
 #include "database.h"
 
-#define BUFFER_SIZE 32000
+#define BUFFER_SIZE 64000
 
 struct Server {
     ServerSocket *socket;
@@ -77,6 +77,10 @@ void server_run(Server *server) {
             server_listByEmail(server, request);
         } else if (strcmp(cmd, "removeByEmail") == 0) {
             server_removeByEmail(server, request);
+        } else if (strcmp(cmd, "uploadImage") == 0) {
+            server_uploadImage(server, request);
+        } else if (strcmp(cmd, "downloadImage") == 0) {
+            server_downloadImage(server, request);
         } else {
             printf("Received unknown message\n");
         }
